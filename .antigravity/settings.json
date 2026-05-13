@@ -1,0 +1,6 @@
+{
+    "python.defaultInterpreterPath": "/home/hardik/Technotery/FastApi/Project/WhatsApp/.venv/bin/python",
+    "python.analysis.extraPaths": [
+        "/home/hardik/Technotery/FastApi/Project/WhatsApp/.venv/lib/python3.14/site-packages"
+    ]
+}
