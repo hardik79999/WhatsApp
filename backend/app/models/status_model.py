@@ -13,6 +13,7 @@ class Status(Base):
     media_url = Column(String, nullable=True)
     thumbnail_url = Column(String, nullable=True)
     content = Column(Text, nullable=True)
+    background_color = Column(String, nullable=True)
 
     # Status kab expire hoga (e.g., 24 hours after creation)
     expires_at = Column(DateTime(timezone=True), index=True, nullable=False)

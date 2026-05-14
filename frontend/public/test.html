@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Clone - Diagnostic Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background: #111b21;
+            color: #e9edef;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #00a884;
+        }
+        .test-item {
+            background: #202c33;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #00a884;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .success { background: #0d2b1e; color: #25d366; }
+        .error { background: #2a1515; color: #ff6b6b; }
+        .info { background: #2a3942; color: #8696a0; }
+        button {
+            background: #00a884;
+            color: #111b21;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #06cf9c;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 WhatsApp Clone - Diagnostic Test</h1>
+        
+        <div class="test-item">
+            <h3>✅ HTML & CSS Loading</h3>
+            <p>If you can see this page with styling, HTML and CSS are working correctly.</p>
+            <span class="status success">PASS</span>
+        </div>
+
+        <div class="test-item">
+            <h3>🔍 JavaScript Test</h3>
+            <p>Click the button below to test if JavaScript is working:</p>
+            <button onclick="testJavaScript()">Test JavaScript</button>
+            <div id="js-result"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>🌐 Backend API Test</h3>
+            <p>Click to test if the backend API is accessible:</p>
+            <button onclick="testBackend()">Test Backend API</button>
+            <div id="api-result"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>🔌 WebSocket Test</h3>
+            <p>Click to test WebSocket connection:</p>
+            <button onclick="testWebSocket()">Test WebSocket</button>
+            <div id="ws-result"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>📦 LocalStorage Test</h3>
+            <p>Click to test browser storage:</p>
+            <button onclick="testLocalStorage()">Test LocalStorage</button>
+            <div id="storage-result"></div>
+        </div>
+
+        <div class="test-item">
+            <h3>🚀 Quick Actions</h3>
+            <button onclick="window.location.href='/'">Go to Main App</button>
+            <button onclick="clearCache()">Clear Cache & Reload</button>
+            <button onclick="window.location.reload(true)">Hard Refresh</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        function testJavaScript() {
+            const result = document.getElementById('js-result');
+            result.innerHTML = '<span class="status success">✅ JavaScript is working!</span>';
+            console.log('JavaScript test passed');
+        }
+
+        async function testBackend() {
+            const result = document.getElementById('api-result');
+            result.innerHTML = '<span class="status info">⏳ Testing...</span>';
+            
+            try {
+                const response = await fetch('http://localhost:8000/');
+                const data = await response.json();
+                result.innerHTML = `<span class="status success">✅ Backend API is working!</span><br><small>Response: ${JSON.stringify(data)}</small>`;
+                console.log('Backend test passed:', data);
+            } catch (error) {
+                result.innerHTML = `<span class="status error">❌ Backend API failed!</span><br><small>Error: ${error.message}</small>`;
+                console.error('Backend test failed:', error);
+            }
+        }
+
+        async function testWebSocket() {
+            const result = document.getElementById('ws-result');
+            result.innerHTML = '<span class="status info">⏳ Testing...</span>';
+            
+            try {
+                const ws = new WebSocket('ws://localhost:8000/api/v1/ws');
+                
+                ws.onopen = () => {
+                    result.innerHTML = '<span class="status success">✅ WebSocket connection opened!</span>';
+                    console.log('WebSocket test passed');
+                    setTimeout(() => ws.close(), 1000);
+                };
+                
+                ws.onerror = (error) => {
+                    result.innerHTML = '<span class="status error">❌ WebSocket connection failed!</span>';
+                    console.error('WebSocket test failed:', error);
+                };
+                
+                ws.onclose = () => {
+                    console.log('WebSocket closed');
+                };
+            } catch (error) {
+                result.innerHTML = `<span class="status error">❌ WebSocket failed!</span><br><small>Error: ${error.message}</small>`;
+                console.error('WebSocket test failed:', error);
+            }
+        }
+
+        function testLocalStorage() {
+            const result = document.getElementById('storage-result');
+            
+            try {
+                localStorage.setItem('test', 'value');
+                const value = localStorage.getItem('test');
+                localStorage.removeItem('test');
+                
+                if (value === 'value') {
+                    result.innerHTML = '<span class="status success">✅ LocalStorage is working!</span>';
+                    console.log('LocalStorage test passed');
+                } else {
+                    throw new Error('Value mismatch');
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="status error">❌ LocalStorage failed!</span><br><small>Error: ${error.message}</small>`;
+                console.error('LocalStorage test failed:', error);
+            }
+        }
+
+        function clearCache() {
+            localStorage.clear();
+            sessionStorage.clear();
+            alert('Cache cleared! Page will reload...');
+            window.location.reload(true);
+        }
+
+        // Auto-run tests on page load
+        window.addEventListener('load', () => {
+            console.log('Diagnostic page loaded');
+            console.log('Frontend URL: http://localhost:5173');
+            console.log('Backend URL: http://localhost:8000');
+            console.log('Browser:', navigator.userAgent);
+        });
+    </script>
+</body>
+</html>

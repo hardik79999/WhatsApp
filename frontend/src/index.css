@@ -1,0 +1,223 @@
+@import "tailwindcss";
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  background: #111b21;
+  overflow: hidden;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar       { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #374045; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #4a5568; }
+
+/* ─── Keyframes ─── */
+@keyframes spin        { to { transform: rotate(360deg); } }
+@keyframes fadeSlideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+@keyframes fadeIn      { from { opacity:0; } to { opacity:1; } }
+@keyframes pulse-dot   { 0%,80%,100% { transform:scale(0); } 40% { transform:scale(1); } }
+@keyframes blink       { 0%,100% { opacity:1; } 50% { opacity:0; } }
+@keyframes loadbar     {
+  0%   { width: 0%;   margin-left: 0; }
+  50%  { width: 70%;  margin-left: 15%; }
+  100% { width: 0%;   margin-left: 100%; }
+}
+@keyframes pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(37,211,102,.5); }
+  70%  { box-shadow: 0 0 0 20px rgba(37,211,102,0); }
+  100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
+}
+
+.fade-in  { animation: fadeIn .2s ease; }
+.slide-up { animation: fadeSlideUp .25s ease; }
+
+/* ─── Typing indicator dots ─── */
+.typing-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #8696a0; display: inline-block; margin: 0 2px;
+  animation: pulse-dot 1.4s infinite ease-in-out both;
+}
+.typing-dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-dot:nth-child(2) { animation-delay: -0.16s; }
+
+/* ─── Message bubble tails ─── */
+.bubble-out {
+  position: relative;
+}
+.bubble-out::before {
+  content: '';
+  position: absolute;
+  top: 0; right: -8px;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 0 8px 8px;
+  border-color: transparent transparent transparent #005c4b;
+}
+.bubble-in {
+  position: relative;
+}
+.bubble-in::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -8px;
+  width: 0; height: 0;
+  border-style: solid;
+  border-width: 0 8px 8px 0;
+  border-color: transparent #202c33 transparent transparent;
+}
+
+/* ─── WA dark chat background ─── */
+.wa-bg {
+  background-color: #0b141a;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+}
+
+/* ─── Icon button ─── */
+.icon-btn {
+  background: none; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; padding: 8px;
+  transition: background .15s;
+  flex-shrink: 0;
+}
+.icon-btn:hover { background: rgba(134,150,160,.15); }
+.icon-btn:active { background: rgba(134,150,160,.25); }
+
+/* ─── Chat list item hover ─── */
+.chat-item { transition: background .12s; }
+.chat-item:hover { background: #202c33 !important; }
+.chat-item.active { background: #2a3942 !important; }
+
+/* ─── Sidebar tab ─── */
+.sidebar-tab {
+  flex: 1; padding: 14px 0; border: none; background: none;
+  cursor: pointer; font-size: 13px; font-weight: 600;
+  letter-spacing: .3px; color: #8696a0;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.sidebar-tab.active {
+  color: #00a884;
+  border-bottom-color: #00a884;
+}
+
+/* ─── Context menu ─── */
+.ctx-menu {
+  position: fixed; background: #233138; border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,.5); z-index: 9999;
+  min-width: 160px; overflow: hidden;
+  animation: fadeIn .12s ease;
+}
+.ctx-menu-item {
+  padding: 12px 20px; color: #e9edef; font-size: 14px;
+  cursor: pointer; transition: background .1s;
+}
+.ctx-menu-item:hover { background: #2a3942; }
+.ctx-menu-item.danger { color: #f15c6d; }
+
+/* ─── Unread badge ─── */
+.unread-badge {
+  min-width: 20px; height: 20px; border-radius: 10px;
+  background: #00a884; color: #111b21;
+  font-size: 11px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 5px; flex-shrink: 0;
+}
+
+/* ─── OTP boxes (dark theme) ─── */
+.otp-box {
+  width: 52px; height: 60px;
+  border: 2px solid #2a3942;
+  border-radius: 10px; font-size: 24px; font-weight: 700;
+  text-align: center; outline: none;
+  color: #e9edef; background: #202c33;
+  transition: border-color .2s, box-shadow .2s;
+  caret-color: #00a884;
+}
+.otp-box:focus {
+  border-color: #00a884;
+  box-shadow: 0 0 0 3px rgba(0,168,132,.2);
+}
+
+/* ─── Textarea auto-grow ─── */
+.msg-input {
+  width: 100%; background: #2a3942; border: none; outline: none;
+  border-radius: 8px; padding: 10px 16px;
+  color: #e9edef; font-size: 15px; font-family: inherit;
+  caret-color: #00a884; resize: none; line-height: 1.5;
+  max-height: 120px; overflow-y: auto;
+}
+.msg-input::placeholder { color: #8696a0; }
+
+/* ─── Tooltip ─── */
+[title] { position: relative; }
+
+/* ─── Search highlight ─── */
+mark { background: #00a884; color: #111b21; border-radius: 2px; padding: 0 1px; }
+
+/* ─── Smooth panel slide ─── */
+.panel-slide-enter  { transform: translateX(100%); }
+.panel-slide-active { transform: translateX(0); transition: transform .25s cubic-bezier(.4,0,.2,1); }
+
+/* ─── New Thin Sidebar & Filters ─── */
+.nav-icon-btn {
+  background: none;
+  border: none;
+  color: #aebac1;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+  padding: 0;
+}
+.nav-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+.nav-icon-btn.active {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e9edef;
+}
+.filter-pill {
+  background: #202c33;
+  color: #8696a0;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 14px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s;
+}
+.filter-pill:hover {
+  background: #2a3942;
+}
+.filter-pill.active {
+  background: #0a332c;
+  color: #00a884;
+}
+.big-empty-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 140px;
+  height: 120px;
+  background: #1e2a30;
+  border-radius: 20px;
+  color: #e9edef;
+  font-size: 14px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 0.2s;
+  gap: 16px;
+}
+.big-empty-btn:hover {
+  background: #233138;
+}
