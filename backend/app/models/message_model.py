@@ -18,6 +18,8 @@ class Message(Base):
     thumbnail_url = Column(String, nullable=True)
     file_size = Column(Integer, nullable=True)
     duration = Column(Integer, nullable=True) # Audio/Video messages ke liye
+    media_id = Column(UUID(as_uuid=True), ForeignKey("media_uploads.id", ondelete="SET NULL"), nullable=True)
+    caption = Column(String, nullable=True)
     
     message_type = Column(String, default="text") # text, image, video, document, audio
 
@@ -38,6 +40,7 @@ class Message(Base):
 
     # Relationships
     chat = relationship("Chat", back_populates="messages")
+    media = relationship("MediaUpload", backref="messages")
     # Ye SQLAlchemy ko batayega ki ye relationship table ke andar hi (self) hai
     replied_message = relationship("Message", remote_side=[id])
 

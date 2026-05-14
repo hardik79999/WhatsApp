@@ -1,8 +1,9 @@
-import React, { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import Avatar from './Avatar';
 import MessageBubble from './chat/MessageBubble';
 import ChatInput from './chat/ChatInput';
 import TypingIndicator from './TypingIndicator';
+import ImageLightbox from './chat/ImageLightbox';
 import { Icon } from './Icons';
 import CallButton from './CallButton';
 
@@ -10,34 +11,50 @@ function ChatWindow({
   chat, 
   messages, 
   currentUser, 
-  newMessage, 
-  setNewMessage, 
-  onSendMessage,
+  onMessageSent,
   onContextMenu,
-  onOpenMediaUpload,
   onOpenGroupInfo,
-  onReactionClick,
   typingUsers = [],
   ws,
   onCallStarted,
 }) {
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
 
-  // Auto-scroll to latest message - improved reliability
+  // Lightbox state
+  const [lightbox, setLightbox] = useState(null); // { images: [...], startIndex: n, senderName }
+
+  // Auto-scroll to latest message
   useEffect(() => {
     const scrollToBottom = () => {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     };
-    
-    // Scroll immediately
     scrollToBottom();
-    
-    // Also scroll after a short delay to handle any rendering delays
     const timer = setTimeout(scrollToBottom, 100);
-    
     return () => clearTimeout(timer);
-  }, [messages, chat?.id]); // Trigger on messages change or chat change
+  }, [messages, chat?.id]);
+
+  // Build flat list of all image messages for lightbox navigation
+  const imageMessages = (messages || []).filter(m => m.message_type === "image" && m.media_url);
+
+  const openLightbox = (msg) => {
+    const images = imageMessages.map(m => ({
+      url: m.media_url,
+      filename: m.content || "image",
+      caption: m.content || null,
+      created_at: m.created_at,
+      sender_id: m.sender_id,
+    }));
+    const startIndex = imageMessages.findIndex(m => m.id === msg.id);
+    // Determine sender name for the header
+    let senderName = "Unknown";
+    if (msg.sender_id === currentUser?.id) {
+      senderName = "You";
+    } else {
+      const participant = chat?.participants?.find(p => p.user_id === msg.sender_id);
+      senderName = participant?.username || participant?.phone || "Unknown";
+    }
+    setLightbox({ images, startIndex: Math.max(startIndex, 0), senderName });
+  };
 
   if (!chat) {
     return (
@@ -97,7 +114,6 @@ function ChatWindow({
           </div>
         </div>
         <div style={{ display:'flex', gap:2 }}>
-          {/* Only show call buttons for 1-to-1 chats */}
           {!chat.is_group && chatOther && (
             <>
               <CallButton
@@ -146,11 +162,11 @@ function ChatWindow({
               key={msg.id}
               message={msg}
               isMine={String(msg.sender_id) === String(currentUser.id)}
+              onImageClick={openLightbox}
             />
           ))
         )}
         
-        {/* Typing Indicator */}
         {typingUsers.length > 0 && (
           <div style={{ alignSelf:'flex-start', marginTop:4 }}>
             <TypingIndicator />
@@ -165,13 +181,19 @@ function ChatWindow({
         chatId={chat.id}
         currentUserId={currentUser.id}
         onMessageSent={(newMsg) => {
-          // Send via WebSocket (fallback) if App.jsx handles WebSocket
-          // The ChatInput itself does axios.post.
-          // Since we do not have setMessages passed in ChatWindow,
-          // we use the existing onSendMessage approach or let WebSocket handle incoming messages
-          // App.jsx will automatically handle the WebSocket `new_message` broadcast!
+          if (onMessageSent) onMessageSent(newMsg);
         }}
       />
+
+      {/* ── Image Lightbox ── */}
+      {lightbox && (
+        <ImageLightbox
+          images={lightbox.images}
+          startIndex={lightbox.startIndex}
+          senderName={lightbox.senderName}
+          onClose={() => setLightbox(null)}
+        />
+      )}
     </>
   );
 }

@@ -1,20 +1,25 @@
+import uuid
+import os
+import aiofiles
+from pathlib import Path
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
-from typing import Optional
-import uuid
-import os
-from pathlib import Path
 
+from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
+from app.models.media_model import MediaUpload
 
 router = APIRouter()
 
-MEDIA_DIR = Path("media")
+# ── Storage root — resolved to absolute path at startup ──────────────────────
+MEDIA_DIR = Path("media").resolve()
 MEDIA_DIR.mkdir(exist_ok=True)
 
-ALLOWED_TYPES = {
+ALLOWED_TYPES: dict[str, tuple[str, str]] = {
     "image/jpeg":       ("image",    "images"),
     "image/png":        ("image",    "images"),
     "image/gif":        ("image",    "images"),
@@ -24,12 +29,14 @@ ALLOWED_TYPES = {
     "audio/mpeg":       ("audio",    "audios"),
     "audio/ogg":        ("audio",    "audios"),
     "audio/wav":        ("audio",    "audios"),
-    "audio/webm":       ("audio",    "audios"),   # MediaRecorder default
+    "audio/webm":       ("audio",    "audios"),
     "application/pdf":  ("document", "documents"),
-    "application/msword": ("document", "documents"),
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-                        ("document", "documents"),
+    "application/msword":                                                    ("document", "documents"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("document", "documents"),
 }
+
+# Allowed folder names — used to validate path parameters
+ALLOWED_FOLDERS = {"images", "videos", "audios", "documents"}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
@@ -37,47 +44,93 @@ BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
 
 
 class MediaUploadResponse(BaseModel):
+    id: uuid.UUID
     media_url: str
-    media_type: str      # image | video | audio | document
+    file_type: str
     file_size: int
     filename: str
-    duration: Optional[int] = None  # seconds (populated client-side for audio)
+    thumbnail_url: Optional[str] = None
+    duration: Optional[int] = None
+
+
+def _safe_resolve(folder: str, filename: str) -> Path:
+    """
+    Resolve the target path and verify it stays inside MEDIA_DIR.
+    Raises HTTPException 400 on path traversal attempts.
+    """
+    if folder not in ALLOWED_FOLDERS:
+        raise HTTPException(status_code=400, detail="Invalid folder")
+    # Reject any path separators or dots in the filename component
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    resolved = (MEDIA_DIR / folder / filename).resolve()
+    if not str(resolved).startswith(str(MEDIA_DIR)):
+        raise HTTPException(status_code=400, detail="Path traversal detected")
+    return resolved
 
 
 @router.post("/upload", response_model=MediaUploadResponse)
 async def upload_media(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     contents = await file.read()
     file_size = len(contents)
 
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+
     if file_size > MAX_FILE_SIZE:
         raise HTTPException(status_code=413, detail="File too large. Max 50 MB")
 
-    content_type = file.content_type or ""
+    # Validate MIME type from the header (not the filename extension)
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
     if content_type not in ALLOWED_TYPES:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {content_type}")
 
-    media_type, folder = ALLOWED_TYPES[content_type]
-
+    file_type, folder = ALLOWED_TYPES[content_type]
     folder_path = MEDIA_DIR / folder
     folder_path.mkdir(exist_ok=True)
 
-    suffix = Path(file.filename or "file").suffix or ".bin"
+    # Generate a UUID-based filename — never trust the original name for storage
+    original_suffix = Path(file.filename or "file").suffix.lower()
+    # Whitelist safe extensions
+    safe_suffixes = {".jpg", ".jpeg", ".png", ".gif", ".webp",
+                     ".mp4", ".webm", ".mp3", ".ogg", ".wav",
+                     ".pdf", ".doc", ".docx"}
+    suffix = original_suffix if original_suffix in safe_suffixes else ".bin"
     unique_name = f"{uuid.uuid4()}{suffix}"
     file_path = folder_path / unique_name
 
-    with open(file_path, "wb") as f:
-        f.write(contents)
+    # Async write — avoids blocking the event loop
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(contents)
 
-    media_url = f"{BASE_URL}/media/{folder}/{unique_name}"
+    file_url = f"{BASE_URL}/media/{folder}/{unique_name}"
+    thumbnail_url = file_url if file_type == "image" else None
+
+    media = MediaUpload(
+        uploaded_by_id=current_user.id,
+        file_name=file.filename or unique_name,
+        file_type=file_type,
+        mime_type=content_type,
+        file_size=file_size,
+        file_url=file_url,
+        thumbnail_url=thumbnail_url,
+        file_path=str(file_path),
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
 
     return MediaUploadResponse(
-        media_url=media_url,
-        media_type=media_type,
-        file_size=file_size,
-        filename=file.filename or unique_name,
+        id=media.id,
+        media_url=media.file_url,
+        file_type=media.file_type,
+        file_size=media.file_size,
+        filename=media.file_name,
+        thumbnail_url=media.thumbnail_url,
     )
 
 
@@ -85,14 +138,24 @@ async def upload_media(
 async def delete_media(
     folder: str,
     filename: str,
-    current_user: User = Depends(get_current_user)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    # Basic path traversal guard
-    if ".." in folder or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid path")
+    file_path = _safe_resolve(folder, filename)
 
-    file_path = MEDIA_DIR / folder / filename
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
+    media = db.query(MediaUpload).filter(
+        MediaUpload.file_path == str(file_path)
+    ).first()
 
-    os.remove(file_path)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media record not found")
+
+    # Ownership check — only uploader can delete
+    if str(media.uploaded_by_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="Not your file")
+
+    db.delete(media)
+    db.commit()
+
+    if file_path.exists():
+        os.remove(file_path)

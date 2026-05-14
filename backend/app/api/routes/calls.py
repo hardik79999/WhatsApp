@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
-from app.models.call_model import Call, CallParticipant
+from app.models.call_model import Call
 from app.schemas.call_schema import CallInitiate, CallResponse, CallHistoryResponse
 from app.websocket.manager import manager
  
@@ -43,12 +43,6 @@ async def initiate_call(
     db.commit()
     db.refresh(new_call)
  
-    # Add both users as participants
-    db.add_all([
-        CallParticipant(call_id=new_call.id, user_id=current_user.id),
-        CallParticipant(call_id=new_call.id, user_id=request.receiver_id),
-    ])
-    db.commit()
  
     # Push real-time notification to receiver
     await manager.send_personal_message({

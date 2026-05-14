@@ -11,10 +11,13 @@ class Chat(Base):
     is_group = Column(Boolean, default=False)
     
     group_name = Column(String, nullable=True)
+    group_description = Column(Text, nullable=True)
+    group_picture = Column(String, nullable=True)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     group_pic_id = Column(UUID(as_uuid=True), ForeignKey("media_uploads.id", ondelete="SET NULL"), nullable=True)
     group_created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    last_message_id = Column(UUID(as_uuid=True), nullable=True) 
+    last_message_id = Column(UUID(as_uuid=True), nullable=True)
     last_message_at = Column(DateTime(timezone=True), index=True, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())

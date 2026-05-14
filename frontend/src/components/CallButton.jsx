@@ -19,7 +19,12 @@ function CallButton({ contactId, contactUser, callType, ws, onCallStarted }) {
         call_type: callType,
       });
       // Caller enters CallScreen immediately; sends webrtc_offer after call_accepted WS event
-      onCallStarted && onCallStarted(data.id, callType, contactUser);
+      // Fix: map user_id → id for proper remoteUser shape
+      onCallStarted && onCallStarted(data.id, callType, {
+        id: contactUser.user_id || contactUser.id,
+        username: contactUser.username,
+        profile_pic: contactUser.profile_pic,
+      });
     } catch (e) {
       console.error("Call initiation error:", e);
       alert("Could not start call. Please try again.");

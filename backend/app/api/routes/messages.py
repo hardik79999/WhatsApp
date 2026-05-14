@@ -68,6 +68,8 @@ async def send_message(
         thumbnail_url=request.thumbnail_url,
         file_size=request.file_size,
         duration=request.duration,
+        media_id=request.media_id,
+        caption=request.caption,
         reply_to_message_id=request.reply_to_message_id,
     )
     db.add(new_message)
@@ -104,6 +106,8 @@ async def send_message(
         "thumbnail_url": new_message.thumbnail_url,
         "file_size": new_message.file_size,
         "duration": new_message.duration,
+        "media_id": str(new_message.media_id) if new_message.media_id else None,
+        "caption": new_message.caption,
         "reply_to_message_id": str(new_message.reply_to_message_id) if new_message.reply_to_message_id else None,
         "replied_message": reply_preview,
         "status": new_message.status,

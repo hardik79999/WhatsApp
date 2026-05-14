@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import axios from "axios";
+import api from "../../api";
 import MediaUploadButton from "./MediaUploadButton";
 import VoiceRecorder from "./VoiceRecorder";
 
@@ -90,8 +90,8 @@ export default function ChatInput({ chatId, currentUserId, onMessageSent, replyT
   const sendMessage = async (payload) => {
     setSending(true);
     try {
-      const { data } = await axios.post(
-        "/api/v1/messages/",
+      const { data } = await api.post(
+        "/messages/",
         {
           chat_id: chatId,
           ...payload,
@@ -130,10 +130,13 @@ export default function ChatInput({ chatId, currentUserId, onMessageSent, replyT
   };
 
   const handleMediaUpload = async (uploadResult) => {
+    // API returns `file_type` (image/video/audio/document), not `media_type`
+    const msgType = uploadResult.file_type || uploadResult.media_type || "document";
     await sendMessage({
-      content: uploadResult.filename,
-      message_type: uploadResult.media_type,
+      content: uploadResult.filename || null,
+      message_type: msgType,
       media_url: uploadResult.media_url,
+      media_id: uploadResult.id || null,
       file_size: uploadResult.file_size,
     });
   };

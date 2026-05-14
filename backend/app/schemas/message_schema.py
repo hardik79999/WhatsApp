@@ -12,6 +12,8 @@ class MessageCreate(BaseModel):
     thumbnail_url: Optional[str] = None
     file_size: Optional[int] = None
     duration: Optional[int] = None         # seconds, for audio/video
+    media_id: Optional[UUID] = None
+    caption: Optional[str] = None
     reply_to_message_id: Optional[UUID] = None
 
 
@@ -48,6 +50,8 @@ class MessageResponse(BaseModel):
     is_deleted_for_everyone: bool = False
     created_at: datetime
     edited_at: Optional[datetime] = None
+    media_id: Optional[UUID] = None
+    caption: Optional[str] = None
 
     class Config:
         from_attributes = True

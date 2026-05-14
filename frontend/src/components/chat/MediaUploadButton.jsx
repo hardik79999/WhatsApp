@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import axios from "axios";
+import api from "../../api";
 
 const ACCEPT = "image/*,video/mp4,video/webm,audio/*,application/pdf,.doc,.docx";
 
@@ -15,7 +15,7 @@ export default function MediaUploadButton({ onUpload, disabled }) {
     formData.append("file", file);
 
     try {
-      const { data } = await axios.post("/api/v1/media/upload", formData, {
+      const { data } = await api.post("/media/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
         withCredentials: true,
       });

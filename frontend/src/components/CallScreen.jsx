@@ -7,7 +7,6 @@
 //   callType    – "audio" | "video"
 //   remoteUser  – { id, username, profile_pic }
 //   isCaller    – bool
-//   offerSdp    – (callee only) SDP from webrtc_offer WS event
 //   ws          – live WebSocket instance from App.jsx
 //   localUserId – current user's id
 //   onEnd       – () => void
@@ -18,7 +17,7 @@ import Avatar from "./Avatar";
 import api from "../api";
 
 export default function CallScreen({
-  callId, callType, remoteUser, isCaller, offerSdp, ws, localUserId, onEnd,
+  callId, callType, remoteUser, isCaller, ws, localUserId, onEnd,
 }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -51,15 +50,9 @@ export default function CallScreen({
 
   // ── Start or answer on mount ──────────────────────────────
   useEffect(() => {
-    if (isCaller) {
-      // Caller: wait for call_accepted WS event before sending offer
-      // (handled in the WS onmessage block below)
-    } else {
-      // Callee: if we already have the offer SDP, answer immediately
-      if (offerSdp) {
-        rtc.handleOffer(offerSdp).catch(console.error);
-      }
-    }
+    // Caller: waits for call_accepted WS event before sending offer (handled below).
+    // Callee: waits for webrtc_offer WS event (handled below).
+    // Nothing to do here on mount — the WS listener drives everything.
 
     return () => {
       clearInterval(timerRef.current);

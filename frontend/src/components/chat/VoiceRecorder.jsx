@@ -1,51 +1,68 @@
 import { useState, useRef, useEffect } from "react";
-import axios from "axios";
+import api from "../../api";
 
 export default function VoiceRecorder({ onRecorded, disabled }) {
   const [recording, setRecording] = useState(false);
-  const [seconds, setSeconds] = useState(0);
+  const [seconds,   setSeconds]   = useState(0);
   const mediaRecorderRef = useRef(null);
-  const chunksRef = useRef([]);
-  const timerRef = useRef(null);
+  const chunksRef        = useRef([]);
+  const timerRef         = useRef(null);
+  const secondsRef       = useRef(0);
 
-  useEffect(() => () => stopTimer(), []);
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    mediaRecorderRef.current?.stream?.getTracks().forEach(t => t.stop());
+  }, []);
 
   const startTimer = () => {
+    secondsRef.current = 0;
     setSeconds(0);
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
+    timerRef.current = setInterval(() => {
+      secondsRef.current += 1;
+      setSeconds(secondsRef.current);
+    }, 1000);
   };
 
-  const stopTimer = () => {
-    clearInterval(timerRef.current);
-  };
+  const stopTimer = () => clearInterval(timerRef.current);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      // Prefer audio/webm; fallback to whatever browser supports
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+        ? "audio/webm"
+        : "";
+      const mr = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       chunksRef.current = [];
 
-      mr.ondataavailable = (e) => chunksRef.current.push(e.data);
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
       mr.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        const duration = seconds;
+        stream.getTracks().forEach(t => t.stop());
+        const duration = secondsRef.current;
+        const blob = new Blob(chunksRef.current, { type: mr.mimeType || "audio/webm" });
 
         const formData = new FormData();
         formData.append("file", blob, "voice_note.webm");
 
         try {
-          const { data } = await axios.post("/api/v1/media/upload", formData, {
+          const { data } = await api.post("/media/upload", formData, {
             headers: { "Content-Type": "multipart/form-data" },
             withCredentials: true,
           });
+          // data.file_type === "audio", data.media_url, data.file_size
           onRecorded({ ...data, duration });
         } catch (err) {
           console.error("Voice upload failed:", err);
+          alert("Voice upload failed. Please try again.");
         }
       };
 
-      mr.start();
+      mr.start(250); // collect data every 250ms
       mediaRecorderRef.current = mr;
       setRecording(true);
       startTimer();
@@ -55,9 +72,16 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
   };
 
   const stopRecording = () => {
-    mediaRecorderRef.current?.stop();
+    if (mediaRecorderRef.current?.state !== "inactive") {
+      mediaRecorderRef.current.stop();
+    }
     setRecording(false);
     stopTimer();
+  };
+
+  const handleClick = () => {
+    if (recording) stopRecording();
+    else startRecording();
   };
 
   const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -67,11 +91,8 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
   return (
     <button
       type="button"
-      onMouseDown={startRecording}
-      onMouseUp={stopRecording}
-      onTouchStart={startRecording}
-      onTouchEnd={stopRecording}
-      title={recording ? `Recording… ${fmt(seconds)}` : "Hold to record voice note"}
+      onClick={handleClick}
+      title={recording ? `Stop recording (${fmt(seconds)})` : "Record voice note"}
       style={{
         width: 40,
         height: 40,
@@ -84,12 +105,13 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
         flexShrink: 0,
         background: recording ? "#e74c3c" : "rgba(134,150,160,0.15)",
         color: recording ? "#fff" : "#8696a0",
-        transition: "background 0.2s, transform 0.1s",
-        animation: recording ? "pulse 1s infinite" : "none",
+        transition: "background 0.2s",
+        animation: recording ? "pulse 1.2s ease-in-out infinite" : "none",
+        position: "relative",
       }}
     >
       {recording ? (
-        /* Show timer while recording */
+        /* Recording indicator: red dot + timer */
         <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 700 }}>
           {fmt(seconds)}
         </span>

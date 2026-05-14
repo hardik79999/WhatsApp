@@ -1,20 +1,34 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
+import api from '../api';
 
 function CreateGroupPanel({ 
   isOpen, 
   contacts, 
   onClose, 
-  onCreateGroup 
+  onCreate,
+  onCreateGroup,
+  onLoadContacts,
 }) {
   const [step, setStep] = useState(1); // 1: Select participants, 2: Group details
   const [selectedContacts, setSelectedContacts] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [groupDescription, setGroupDescription] = useState('');
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [avatarUploadId, setAvatarUploadId] = useState(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
+
+  // Load contacts when panel opens
+  useEffect(() => {
+    if (isOpen && onLoadContacts && contacts.length === 0) {
+      onLoadContacts();
+    }
+  }, [isOpen]);
 
   const filteredContacts = contacts.filter((c) =>
     !searchQuery.trim() || c.saved_name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -42,6 +56,31 @@ function CreateGroupPanel({
     setError('');
   };
 
+  const handleAvatarSelect = (file) => {
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarUploadId(null);
+  };
+
+  const uploadAvatar = async () => {
+    if (!avatarFile) return null;
+    setAvatarUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', avatarFile);
+      const res = await api.post('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setAvatarUploadId(res.data.id);
+      return res.data.id;
+    } catch (err) {
+      console.error('Avatar upload failed', err);
+      throw err;
+    } finally {
+      setAvatarUploading(false);
+    }
+  };
+
   const handleCreate = async () => {
     if (!groupName.trim()) {
       setError('Group name is required');
@@ -52,9 +91,13 @@ function CreateGroupPanel({
     setError('');
 
     try {
-      await onCreateGroup({
+      const picId = avatarUploadId || (avatarFile ? await uploadAvatar() : null);
+      // Support both prop names: onCreate (App.jsx) and onCreateGroup (legacy)
+      const handler = onCreate || onCreateGroup;
+      await handler({
         group_name: groupName.trim(),
         group_description: groupDescription.trim() || null,
+        group_pic_id: picId,
         participant_ids: selectedContacts
       });
       
@@ -63,6 +106,9 @@ function CreateGroupPanel({
       setSelectedContacts([]);
       setGroupName('');
       setGroupDescription('');
+      setAvatarFile(null);
+      setAvatarPreview('');
+      setAvatarUploadId(null);
       setSearchQuery('');
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create group');
@@ -257,25 +303,45 @@ function CreateGroupPanel({
           <div style={{ flex:1, overflowY:'auto', padding:'24px 16px' }}>
             {/* Group Icon Placeholder */}
             <div style={{ display:'flex', justifyContent:'center', marginBottom:24 }}>
-              <div style={{
-                width:120,
-                height:120,
-                borderRadius:'50%',
-                background:'#2a3942',
-                display:'flex',
-                alignItems:'center',
-                justifyContent:'center',
-                cursor:'pointer',
-                position:'relative'
-              }}>
-                <Icon.Plus />
-                <div style={{ position:'absolute', bottom:0, right:0, background:'#00a884', borderRadius:'50%', width:36, height:36, display:'flex', alignItems:'center', justifyContent:'center', border:'3px solid #111b21' }}>
+              <div style={{ position:'relative' }}>
+                <div style={{
+                  width:120,
+                  height:120,
+                  borderRadius:'50%',
+                  background:'#2a3942',
+                  display:'flex',
+                  alignItems:'center',
+                  justifyContent:'center',
+                  cursor:'pointer',
+                  overflow:'hidden'
+                }} onClick={() => document.getElementById('group-avatar-input')?.click()}>
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="Group avatar" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  ) : (
+                    <Icon.Plus />
+                  )}
+                </div>
+                <input
+                  id="group-avatar-input"
+                  type="file"
+                  accept="image/*"
+                  style={{ display:'none' }}
+                  onChange={(e) => e.target.files?.[0] && handleAvatarSelect(e.target.files[0])}
+                />
+                <div style={{ position:'absolute', bottom:-6, right:-6, background:'#00a884', borderRadius:'50%', width:36, height:36, display:'flex', alignItems:'center', justifyContent:'center', border:'3px solid #111b21', color:'#fff' }}>
                   <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
                     <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
                   </svg>
                 </div>
               </div>
             </div>
+            {avatarPreview && (
+              <div style={{ display:'flex', justifyContent:'center', marginBottom:12 }}>
+                <span style={{ color:'#8696a0', fontSize:13 }}>
+                  Selected avatar preview. Click the circle to replace.
+                </span>
+              </div>
+            )}
 
             {/* Group Name */}
             <div style={{ marginBottom:20 }}>

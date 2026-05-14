@@ -15,8 +15,8 @@ function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // API call to update group (you'll need to implement this endpoint)
-      await api.put(`/chats/${chat.id}`, {
+      // Correct endpoint: PUT /chats/{id}/info
+      await api.put(`/chats/${chat.id}/info`, {
         group_name: groupName.trim(),
         group_description: groupDescription.trim()
       });
@@ -34,7 +34,8 @@ function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
     if (!confirm('Are you sure you want to leave this group?')) return;
     
     try {
-      await api.delete(`/chats/${chat.id}/leave`);
+      // Correct endpoint: DELETE /chats/{id}/participants/{userId}
+      await api.delete(`/chats/${chat.id}/participants/${currentUser.id}`);
       onClose();
       onUpdate && onUpdate();
     } catch (error) {

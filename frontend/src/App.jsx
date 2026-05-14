@@ -205,6 +205,16 @@ function App() {
         setIncomingCall(incomingData);
       }
 
+      else if (incomingData.type === "call_accepted") {
+        // Handled directly in CallScreen via its own WS listener.
+        // Nothing to do in App.jsx — CallScreen is already mounted for the caller.
+      }
+
+      else if (incomingData.type === "call_rejected") {
+        setActiveCall(prev => prev?.callId === incomingData.call_id ? null : prev);
+        setIncomingCall(null);
+      }
+
       else if (incomingData.type === "call_ended") {
         setActiveCall(prev => prev?.callId === incomingData.call_id ? null : prev);
         setIncomingCall(null);
@@ -371,7 +381,7 @@ function App() {
     }
   };
 
-  const handleMediaUpload = async (file, mediaType) => {
+  const handleMediaUpload = async (file, caption) => {
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -380,13 +390,16 @@ function App() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      const { media_url, file_size } = uploadRes.data;
+      const { id: media_id, media_url, file_type, file_size } = uploadRes.data;
+      const uploadType = file_type || (file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'document');
       
       const res = await api.post('/messages/', {
         chat_id: selectedChat.id,
-        content: file.name,
-        message_type: mediaType,
+        content: caption || file.name,
+        message_type: uploadType,
         media_url: media_url,
+        media_id,
+        caption,
         file_size: file_size
       });
       
@@ -441,7 +454,7 @@ function App() {
 
   const handleCreateGroup = async (groupData) => {
     try {
-      const res = await api.post('/chats/group', groupData);
+      const res = await api.post('/groups/create', groupData);
       setIsCreateGroupOpen(false);
       await fetchInitialData();
       openChat(res.data);
@@ -614,6 +627,18 @@ function App() {
           newMessage={newMessage}
           setNewMessage={handleTyping}
           onSendMessage={handleSendMessage}
+          onMessageSent={(newMsg) => {
+            // Add sent message immediately (ChatInput already POSTed it)
+            setMessages((prev) => {
+              if (prev.some(m => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+            setChats((prev) => prev.map(c =>
+              c.id === newMsg.chat_id
+                ? { ...c, last_message: newMsg, updated_at: newMsg.created_at }
+                : c
+            ));
+          }}
           onContextMenu={setContextMenu}
           onOpenMediaUpload={() => setIsMediaUploadOpen(true)}
           onOpenGroupInfo={() => setIsGroupInfoOpen(true)}
@@ -686,6 +711,7 @@ function App() {
       {/* ── Media Upload Modal ── */}
       {isMediaUploadOpen && (
         <MediaUploadModal
+          isOpen={isMediaUploadOpen}
           onClose={() => setIsMediaUploadOpen(false)}
           onUpload={handleMediaUpload}
         />
@@ -710,16 +736,9 @@ function App() {
           call={incomingCall}
           onAccept={(callId, callType, caller) => {
             setIncomingCall(null);
-            setActiveCall({ callId, callType, remoteUser: caller, isCaller: false, offerSdp: incomingCall.sdp });
+            setActiveCall({ callId, callType, remoteUser: caller, isCaller: false });
           }}
           onReject={() => {
-            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-              wsRef.current.send(JSON.stringify({
-                type: 'call_reject',
-                call_id: incomingCall.call_id,
-                target_user_id: incomingCall.caller_id,
-              }));
-            }
             setIncomingCall(null);
           }}
         />
@@ -732,7 +751,6 @@ function App() {
           callType={activeCall.callType}
           remoteUser={activeCall.remoteUser}
           isCaller={activeCall.isCaller}
-          offerSdp={activeCall.offerSdp}
           ws={wsRef.current}
           localUserId={currentUser?.id}
           onEnd={() => setActiveCall(null)}

@@ -1,20 +1,20 @@
 import React, { useState, useRef } from 'react';
 import { Icon } from './Icons';
 
-function MediaUploadModal({ isOpen, onClose, onSend, type = 'image' }) {
+function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
+    setIsDragActive(false);
     setSelectedFile(file);
 
-    // Create preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setPreview(reader.result);
@@ -22,12 +22,37 @@ function MediaUploadModal({ isOpen, onClose, onSend, type = 'image' }) {
     reader.readAsDataURL(file);
   };
 
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setPreview(reader.result);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragActive(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragActive(false);
+  };
+
   const handleSend = async () => {
     if (!selectedFile) return;
 
     setUploading(true);
     try {
-      await onSend(selectedFile, caption);
+      // Support both `onSend` (internal) and `onUpload` (App.jsx legacy)
+      const handler = onSend || onUpload;
+      await handler(selectedFile, caption);
       handleClose();
     } catch (error) {
       alert('Failed to send media');
@@ -82,14 +107,21 @@ function MediaUploadModal({ isOpen, onClose, onSend, type = 'image' }) {
       </div>
 
       {/* Preview Area */}
-      <div style={{
-        flex: 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        width: '100%',
-        padding: '80px 20px 120px'
-      }}>
+      <div
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+        style={{
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100%',
+          padding: '80px 20px 120px',
+          border: isDragActive ? '2px dashed #00a884' : '2px dashed transparent',
+          transition: 'border-color .2s ease',
+        }}
+      >
         {!preview ? (
           <div style={{ textAlign: 'center' }}>
             <input

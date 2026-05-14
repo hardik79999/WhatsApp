@@ -58,13 +58,16 @@ def format_chat_response(chat: Chat, db: Session, current_user_id=None):
             Message.is_deleted == False
         ).scalar() or 0
 
+    group_picture_url = chat.group_picture or (chat.group_pic.file_url if chat.group_pic else None)
+    group_creator_id = chat.group_created_by_id or chat.created_by
+
     return ChatResponse(
         id=chat.id,
         is_group=chat.is_group,
         group_name=chat.group_name,
-        group_picture=chat.group_picture,
+        group_picture=group_picture_url,
         group_description=chat.group_description,
-        created_by=chat.created_by,
+        created_by=group_creator_id,
         updated_at=chat.updated_at or chat.created_at or datetime.now(timezone.utc),
         participants=participants,
         last_message=last_message_data,
@@ -180,8 +183,15 @@ def get_my_chats(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    from sqlalchemy.orm import joinedload
     my_chat_ids = select(ChatParticipant.chat_id).where(ChatParticipant.user_id == current_user.id)
-    chats = db.query(Chat).filter(Chat.id.in_(my_chat_ids)).order_by(Chat.updated_at.desc().nullslast()).all()
+    chats = (
+        db.query(Chat)
+        .options(joinedload(Chat.participants))
+        .filter(Chat.id.in_(my_chat_ids))
+        .order_by(Chat.updated_at.desc().nullslast())
+        .all()
+    )
     return [format_chat_response(chat, db, current_user.id) for chat in chats]
 
 @router.get("/{chat_id}", response_model=ChatResponse)

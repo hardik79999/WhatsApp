@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api.routes import (
     auth, users, chats, contacts,
     messages, websocket, media, reactions,
-    statuses, calls,                        # ← calls added
+    statuses, calls, groups,                # ← calls added
 )
 from app.core.config import settings
 import app.models
@@ -33,6 +33,7 @@ app.include_router(auth.router,      prefix="/api/v1/auth",      tags=["Authenti
 app.include_router(users.router,     prefix="/api/v1/users",      tags=["Users"])
 app.include_router(contacts.router,  prefix="/api/v1/contacts",   tags=["Contacts"])
 app.include_router(chats.router,     prefix="/api/v1/chats",      tags=["Chats"])
+app.include_router(groups.router,    prefix="/api/v1/groups",     tags=["Groups"])
 app.include_router(messages.router,  prefix="/api/v1/messages",   tags=["Messages"])
 app.include_router(media.router,     prefix="/api/v1/media",      tags=["Media"])
 app.include_router(reactions.router, prefix="/api/v1/reactions",  tags=["Reactions"])

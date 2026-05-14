@@ -1,22 +1,37 @@
-import { useState, useRef } from "react";
+// StatusCreator.jsx
+// Full-screen WhatsApp-style status composer.
+// Supports text (colored background) and photo/video modes.
+
+import { useState, useRef, useEffect } from "react";
 import api from "../api";
 
 const BG_COLORS = [
-  "#1a1a2e", "#16213e", "#0f3460",
-  "#2d6a4f", "#1b4332", "#6a0572",
-  "#c9184a", "#e76f51", "#264653",
+  "#6b4c9a", "#1a1a2e", "#16213e", "#0f3460",
+  "#2d6a4f", "#1b4332", "#c9184a", "#e76f51",
+  "#264653", "#7b2d8b", "#b5451b", "#1565c0",
 ];
 
-export default function StatusCreator({ onClose, onCreated }) {
-  const [mode, setMode]             = useState("text"); // "text" | "media"
-  const [text, setText]             = useState("");
-  const [bgColor, setBgColor]       = useState(BG_COLORS[0]);
-  const [mediaFile, setMediaFile]   = useState(null);
-  const [mediaPreview, setPreview]  = useState(null);
-  const [caption, setCaption]       = useState("");
-  const [uploading, setUploading]   = useState(false);
-  const [error, setError]           = useState("");
-  const fileRef = useRef();
+const FONT_SIZES = [18, 22, 28, 36];
+
+export default function StatusCreator({ initialMode = "text", onClose, onCreated }) {
+  const [mode,        setMode]        = useState(initialMode); // "text" | "media"
+  const [text,        setText]        = useState("");
+  const [bgColor,     setBgColor]     = useState(BG_COLORS[0]);
+  const [fontIdx,     setFontIdx]     = useState(1);
+  const [mediaFile,   setMediaFile]   = useState(null);
+  const [mediaPreview,setPreview]     = useState(null);
+  const [caption,     setCaption]     = useState("");
+  const [uploading,   setUploading]   = useState(false);
+  const [error,       setError]       = useState("");
+  const [showEmoji,   setShowEmoji]   = useState(false);
+
+  const fileRef    = useRef();
+  const textareaRef = useRef();
+
+  // Auto-focus textarea in text mode
+  useEffect(() => {
+    if (mode === "text") textareaRef.current?.focus();
+  }, [mode]);
 
   // ── Pick a media file ──────────────────────────────────────
   const handleFileChange = (e) => {
@@ -31,7 +46,11 @@ export default function StatusCreator({ onClose, onCreated }) {
   const handleSubmit = async () => {
     setError("");
     if (mode === "text" && !text.trim()) {
-      setError("Please enter some text.");
+      setError("Please type something.");
+      return;
+    }
+    if (mode === "media" && !mediaFile) {
+      setError("Please select a photo or video.");
       return;
     }
 
@@ -67,171 +86,265 @@ export default function StatusCreator({ onClose, onCreated }) {
     }
   };
 
+  // ── Emoji insert ──────────────────────────────────────────
+  const insertEmoji = (emoji) => {
+    setText(t => t + emoji);
+    setShowEmoji(false);
+    textareaRef.current?.focus();
+  };
+
+  const QUICK_EMOJIS = ["😀","😂","❤️","🔥","👍","🎉","😍","🙏","💯","✨","😎","🥳","😭","🤔","👀","💪","🌟","🎶","🍕","🚀"];
+
   return (
-    <div style={overlay}>
-      <div style={modal}>
-        {/* Header */}
-        <div style={header}>
-          <span style={{ fontWeight: 700, fontSize: 16 }}>Add Status</span>
-          <button onClick={onClose} style={closeBtn}>✕</button>
-        </div>
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9000,
+      display: "flex", flexDirection: "column",
+      background: mode === "text" ? bgColor : "#0b141a",
+      transition: "background 0.3s",
+    }}>
 
-        {/* Mode toggle */}
-        <div style={{ display: "flex", gap: 8, padding: "12px 16px 0" }}>
-          <ModeBtn active={mode === "text"}  onClick={() => setMode("text")}>📝 Text</ModeBtn>
-          <ModeBtn active={mode === "media"} onClick={() => fileRef.current?.click()}>📷 Photo / Video</ModeBtn>
-        </div>
+      {/* ── Top bar ─────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 16px", flexShrink: 0,
+        background: "rgba(0,0,0,0.25)",
+      }}>
+        {/* Close */}
+        <button
+          onClick={onClose}
+          style={{
+            background: "none", border: "none", color: "#fff",
+            fontSize: 22, cursor: "pointer", lineHeight: 1,
+            width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center",
+          }}
+          aria-label="Close"
+        >✕</button>
 
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/*,video/*"
-          style={{ display: "none" }}
-          onChange={handleFileChange}
-        />
-
-        {/* Preview area */}
-        <div style={{
-          ...previewBox,
-          background: mode === "text" ? bgColor : "#111",
-        }}>
-          {mode === "text" ? (
-            <textarea
-              value={text}
-              onChange={e => setText(e.target.value)}
-              placeholder="Type a status..."
-              maxLength={700}
-              style={textArea}
-            />
-          ) : mediaPreview ? (
-            mediaFile?.type.startsWith("video") ? (
-              <video src={mediaPreview} controls style={mediaStyle} />
-            ) : (
-              <img src={mediaPreview} alt="preview" style={mediaStyle} />
-            )
-          ) : (
-            <div style={{ color: "#888", fontSize: 14 }}>Select a photo or video above</div>
-          )}
-        </div>
-
-        {/* Background color picker (text mode only) */}
+        {/* Right tools (text mode only) */}
         {mode === "text" && (
-          <div style={{ display: "flex", gap: 8, padding: "0 16px 4px", flexWrap: "wrap" }}>
-            {BG_COLORS.map(c => (
-              <button
-                key={c}
-                onClick={() => setBgColor(c)}
-                style={{
-                  width: 28, height: 28, borderRadius: "50%",
-                  background: c, border: bgColor === c ? "3px solid #00a884" : "2px solid #555",
-                  cursor: "pointer",
-                }}
-              />
-            ))}
+          <div style={{ display: "flex", gap: 4 }}>
+            {/* Emoji */}
+            <div style={{ position: "relative" }}>
+              <ToolBtn onClick={() => setShowEmoji(s => !s)} title="Emoji">😊</ToolBtn>
+              {showEmoji && (
+                <div style={{
+                  position: "absolute", top: 44, right: 0, zIndex: 10,
+                  background: "#1f2c34", borderRadius: 12,
+                  padding: 12, display: "flex", flexWrap: "wrap",
+                  gap: 6, width: 240,
+                  boxShadow: "0 8px 32px rgba(0,0,0,0.5)",
+                }}>
+                  {QUICK_EMOJIS.map(e => (
+                    <button
+                      key={e}
+                      onClick={() => insertEmoji(e)}
+                      style={{
+                        background: "none", border: "none", fontSize: 22,
+                        cursor: "pointer", padding: 4, borderRadius: 6,
+                        transition: "background .1s",
+                      }}
+                      onMouseEnter={ev => ev.currentTarget.style.background = "#2a3942"}
+                      onMouseLeave={ev => ev.currentTarget.style.background = "none"}
+                    >{e}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Font size cycle */}
+            <ToolBtn
+              onClick={() => setFontIdx(i => (i + 1) % FONT_SIZES.length)}
+              title="Font size"
+            >
+              <span style={{ fontSize: 13, fontWeight: 700 }}>Aa</span>
+            </ToolBtn>
+
+            {/* Switch to media */}
+            <ToolBtn onClick={() => fileRef.current?.click()} title="Add photo/video">🖼️</ToolBtn>
           </div>
         )}
 
-        {/* Caption (media mode) */}
-        {mode === "media" && mediaPreview && (
-          <div style={{ padding: "0 16px 4px" }}>
-            <input
-              value={caption}
-              onChange={e => setCaption(e.target.value)}
-              placeholder="Add a caption..."
-              maxLength={300}
-              style={{
-                width: "100%", background: "#2a2a2a", border: "1px solid #444",
-                borderRadius: 8, padding: "8px 12px",
-                color: "#fff", fontSize: 14, boxSizing: "border-box",
-              }}
-            />
+        {mode === "media" && (
+          <div style={{ display: "flex", gap: 4 }}>
+            <ToolBtn onClick={() => fileRef.current?.click()} title="Change photo/video">🔄</ToolBtn>
           </div>
         )}
+      </div>
 
-        {error && (
-          <p style={{ color: "#ff6b6b", padding: "0 16px", fontSize: 13, margin: "4px 0" }}>{error}</p>
-        )}
+      {/* Hidden file input */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*,video/*"
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
 
-        {/* Footer */}
-        <div style={{ padding: "12px 16px", display: "flex", justifyContent: "flex-end" }}>
-          <button
-            onClick={handleSubmit}
-            disabled={uploading}
+      {/* ── Main content area ────────────────────────────────── */}
+      <div style={{
+        flex: 1, display: "flex", alignItems: "center", justifyContent: "center",
+        position: "relative", overflow: "hidden",
+      }}>
+        {mode === "text" ? (
+          <textarea
+            ref={textareaRef}
+            value={text}
+            onChange={e => setText(e.target.value)}
+            placeholder="Type a status"
+            maxLength={700}
             style={{
-              background: uploading ? "#555" : "#00a884",
-              color: "#fff", border: "none",
-              borderRadius: 20, padding: "10px 28px",
-              fontWeight: 600, fontSize: 14, cursor: uploading ? "not-allowed" : "pointer",
+              background: "transparent", border: "none", outline: "none",
+              resize: "none", color: "#fff",
+              fontSize: FONT_SIZES[fontIdx],
+              fontWeight: 500, textAlign: "center",
+              padding: "0 40px",
+              width: "100%", maxWidth: 600,
+              lineHeight: 1.5,
+              caretColor: "#fff",
+              fontFamily: "inherit",
+              // Vertically centered via flex parent
+            }}
+            rows={4}
+          />
+        ) : mediaPreview ? (
+          mediaFile?.type.startsWith("video") ? (
+            <video
+              src={mediaPreview}
+              controls
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          ) : (
+            <img
+              src={mediaPreview}
+              alt="preview"
+              style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+            />
+          )
+        ) : (
+          <div
+            onClick={() => fileRef.current?.click()}
+            style={{
+              display: "flex", flexDirection: "column", alignItems: "center",
+              gap: 12, cursor: "pointer", color: "#8696a0",
             }}
           >
-            {uploading ? "Posting…" : "Post Status"}
-          </button>
+            <span style={{ fontSize: 48 }}>🖼️</span>
+            <span style={{ fontSize: 15 }}>Tap to select a photo or video</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Background color picker (text mode) ─────────────── */}
+      {mode === "text" && (
+        <div style={{
+          display: "flex", gap: 8, padding: "8px 16px",
+          justifyContent: "center", flexWrap: "wrap", flexShrink: 0,
+        }}>
+          {BG_COLORS.map(c => (
+            <button
+              key={c}
+              onClick={() => setBgColor(c)}
+              style={{
+                width: 28, height: 28, borderRadius: "50%",
+                background: c,
+                border: bgColor === c ? "3px solid #fff" : "2px solid rgba(255,255,255,0.2)",
+                cursor: "pointer", transition: "transform .1s",
+                transform: bgColor === c ? "scale(1.2)" : "scale(1)",
+              }}
+            />
+          ))}
         </div>
+      )}
+
+      {/* ── Caption (media mode) ─────────────────────────────── */}
+      {mode === "media" && mediaPreview && (
+        <div style={{ padding: "8px 16px", flexShrink: 0 }}>
+          <input
+            value={caption}
+            onChange={e => setCaption(e.target.value)}
+            placeholder="Add a caption…"
+            maxLength={300}
+            style={{
+              width: "100%", background: "rgba(255,255,255,0.1)",
+              border: "none", borderRadius: 24,
+              padding: "10px 16px", color: "#fff",
+              fontSize: 14, outline: "none", boxSizing: "border-box",
+            }}
+          />
+        </div>
+      )}
+
+      {/* ── Error ────────────────────────────────────────────── */}
+      {error && (
+        <div style={{
+          color: "#ff6b6b", textAlign: "center",
+          padding: "4px 16px", fontSize: 13, flexShrink: 0,
+        }}>
+          {error}
+        </div>
+      )}
+
+      {/* ── Bottom bar ───────────────────────────────────────── */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 20px 20px", flexShrink: 0,
+        background: "rgba(0,0,0,0.25)",
+      }}>
+        {/* Privacy label */}
+        <button style={{
+          display: "flex", alignItems: "center", gap: 8,
+          background: "rgba(255,255,255,0.1)", border: "none",
+          borderRadius: 20, padding: "8px 14px",
+          color: "#fff", fontSize: 13, cursor: "pointer",
+        }}>
+          <span>🔄</span>
+          <span>Status (Contacts)</span>
+        </button>
+
+        {/* Send button */}
+        <button
+          onClick={handleSubmit}
+          disabled={uploading}
+          style={{
+            width: 52, height: 52, borderRadius: "50%",
+            background: uploading ? "#555" : "#00a884",
+            border: "none", cursor: uploading ? "not-allowed" : "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            boxShadow: "0 4px 16px rgba(0,168,132,0.4)",
+            transition: "background .2s",
+          }}
+          title="Post status"
+        >
+          {uploading ? (
+            <span style={{ color: "#fff", fontSize: 18 }}>⏳</span>
+          ) : (
+            <svg viewBox="0 0 24 24" fill="none" width="24" height="24">
+              <path d="M2 12L22 2L12 22L10 14L2 12Z" fill="#fff" />
+            </svg>
+          )}
+        </button>
       </div>
     </div>
   );
 }
 
-function ModeBtn({ active, onClick, children }) {
+function ToolBtn({ onClick, title, children }) {
   return (
     <button
       onClick={onClick}
+      title={title}
       style={{
-        background: active ? "#00a884" : "#2a2a2a",
-        color: "#fff", border: "none",
-        borderRadius: 20, padding: "6px 14px",
-        fontSize: 13, fontWeight: active ? 700 : 400,
-        cursor: "pointer",
+        width: 40, height: 40, borderRadius: "50%",
+        background: "rgba(255,255,255,0.15)", border: "none",
+        color: "#fff", fontSize: 18, cursor: "pointer",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        backdropFilter: "blur(4px)",
+        transition: "background .15s",
       }}
+      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.25)"}
+      onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.15)"}
     >
       {children}
     </button>
   );
 }
-
-// ── Styles ──────────────────────────────────────────────────
-
-const overlay = {
-  position: "fixed", inset: 0, zIndex: 8000,
-  background: "rgba(0,0,0,0.75)",
-  display: "flex", alignItems: "center", justifyContent: "center",
-};
-
-const modal = {
-  background: "#1f1f1f", borderRadius: 12,
-  width: "min(440px, 96vw)",
-  display: "flex", flexDirection: "column", gap: 12,
-  overflow: "hidden",
-};
-
-const header = {
-  display: "flex", justifyContent: "space-between", alignItems: "center",
-  padding: "14px 16px",
-  borderBottom: "1px solid #333",
-  color: "#fff",
-};
-
-const closeBtn = {
-  background: "none", border: "none",
-  color: "#aaa", fontSize: 20, cursor: "pointer",
-};
-
-const previewBox = {
-  height: 260,
-  display: "flex", alignItems: "center", justifyContent: "center",
-  margin: "0 16px", borderRadius: 10, overflow: "hidden",
-  transition: "background 0.3s",
-};
-
-const textArea = {
-  width: "100%", height: "100%",
-  background: "transparent", border: "none", outline: "none",
-  resize: "none", color: "#fff",
-  fontSize: 22, fontWeight: 500,
-  textAlign: "center", padding: 20,
-  fontFamily: "inherit",
-};
-
-const mediaStyle = {
-  maxWidth: "100%", maxHeight: "100%", objectFit: "contain",
-};

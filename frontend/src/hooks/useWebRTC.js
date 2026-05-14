@@ -29,8 +29,10 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
   const [isMuted,      setIsMuted]      = useState(false);
   const [isCamOff,     setIsCamOff]     = useState(false);
 
-  const pcRef          = useRef(null);   // RTCPeerConnection
-  const localStreamRef = useRef(null);
+  const pcRef              = useRef(null);   // RTCPeerConnection
+  const localStreamRef     = useRef(null);
+  const iceCandidateBuffer = useRef([]);     // Buffer ICE candidates until remote desc is set
+  const remoteDescSet      = useRef(false);  // Track whether remote description has been set
 
   // ── Helper: send signaling messages via the existing WS ──
   const signal = useCallback((payload) => {
@@ -55,6 +57,10 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
   const createPeerConnection = useCallback((stream) => {
     const pc = new RTCPeerConnection(ICE_SERVERS);
     pcRef.current = pc;
+
+    // Reset ICE buffer state for new connection
+    iceCandidateBuffer.current = [];
+    remoteDescSet.current = false;
 
     // Add local tracks
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
@@ -85,6 +91,20 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
     return pc;
   }, [callId, remoteUserId, signal]);
 
+  // ── Helper: flush buffered ICE candidates after remote desc is set ──
+  const flushIceCandidates = useCallback(async () => {
+    const pc = pcRef.current;
+    if (!pc) return;
+    const buffered = iceCandidateBuffer.current.splice(0);
+    for (const c of buffered) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(c));
+      } catch (e) {
+        console.warn("[WebRTC] Buffered ICE candidate error:", e);
+      }
+    }
+  }, []);
+
   // ── CALLER: called after receiver accepted the call ──────
   const startAsCallerAfterAccept = useCallback(async () => {
     const stream = await getLocalMedia();
@@ -107,6 +127,9 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
     const pc = createPeerConnection(stream);
 
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    remoteDescSet.current = true;
+    await flushIceCandidates(); // apply any candidates that arrived early
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
@@ -116,19 +139,27 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
       target_id: remoteUserId,
       sdp: pc.localDescription,
     });
-  }, [callId, remoteUserId, getLocalMedia, createPeerConnection, signal]);
+  }, [callId, remoteUserId, getLocalMedia, createPeerConnection, signal, flushIceCandidates]);
 
   // ── CALLER: called when webrtc_answer arrives ────────────
   const handleAnswer = useCallback(async (sdp) => {
     const pc = pcRef.current;
     if (!pc) return;
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-  }, []);
+    remoteDescSet.current = true;
+    await flushIceCandidates(); // apply any candidates that arrived early
+  }, [flushIceCandidates]);
 
   // ── Both sides: called when webrtc_ice_candidate arrives ─
+  // Buffers candidates until remote description is set to avoid race conditions
   const handleIceCandidate = useCallback(async (candidate) => {
     const pc = pcRef.current;
     if (!pc) return;
+    if (!remoteDescSet.current) {
+      // Remote description not set yet — buffer the candidate
+      iceCandidateBuffer.current.push(candidate);
+      return;
+    }
     try {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (e) {
@@ -156,8 +187,13 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
   const hangUp = useCallback(() => {
     // Stop all local tracks
     localStreamRef.current?.getTracks().forEach(t => t.stop());
+    localStreamRef.current = null;
     setLocalStream(null);
     setRemoteStream(null);
+
+    // Clear ICE buffer
+    iceCandidateBuffer.current = [];
+    remoteDescSet.current = false;
 
     // Close RTCPeerConnection
     pcRef.current?.close();
