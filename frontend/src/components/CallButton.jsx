@@ -2,11 +2,11 @@
 // Used in ChatWindow header for 1-on-1 chats.
 // Initiates a call via REST, then the receiver gets an "incoming_call" WS event.
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { Icon } from "./Icons";
 import api from "../api";
 
-function CallButton({ contactId, contactUser, callType, ws, onCallStarted }) {
+function CallButton({ contactId, contactUser, callType, onCallStarted }) {
   const [calling, setCalling] = useState(false);
 
   const handleClick = async () => {

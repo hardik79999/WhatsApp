@@ -19,3 +19,11 @@ class MessageReaction(Base):
     __table_args__ = (
         UniqueConstraint('message_id', 'user_id', name='unique_user_message_reaction'),
     )
+
+    # Relationships (used for eager loading in message responses)
+    user = relationship("User")
+    message = relationship("Message", back_populates="reactions")
+
+    @property
+    def username(self):
+        return getattr(self.user, "username", None)

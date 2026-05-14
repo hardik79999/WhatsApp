@@ -20,6 +20,24 @@ export default defineConfig({
               );
             }
           });
+
+          // Vite attaches its listeners *after* configure is called.
+          // We wait a tick to remove them and attach our own clean ones.
+          setTimeout(() => {
+            proxy.removeAllListeners('error');
+            proxy.on('error', (err) => {
+              if (err.code === 'EPIPE' || err.code === 'ECONNRESET') return;
+              console.error('[proxy error]', err);
+            });
+            
+            proxy.removeAllListeners('proxyReqWs');
+            proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+              socket.on('error', (err) => {
+                if (err.code === 'EPIPE' || err.code === 'ECONNRESET') return;
+                console.error('[ws proxy socket error]', err);
+              });
+            });
+          }, 100);
         }
       }
     }

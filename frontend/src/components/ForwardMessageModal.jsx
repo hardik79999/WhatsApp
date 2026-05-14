@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
 
@@ -32,6 +32,7 @@ function ForwardMessageModal({ isOpen, message, chats, currentUser, onClose, onF
       await onForward(message, selectedChats);
       handleClose();
     } catch (error) {
+      console.error('Failed to forward message:', error);
       alert('Failed to forward message');
     } finally {
       setForwarding(false);

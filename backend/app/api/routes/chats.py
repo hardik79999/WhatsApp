@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+from sqlalchemy import and_, exists, select, func
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
@@ -9,7 +9,8 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
 from app.models.chat_model import Chat, ChatParticipant
-from app.models.message_model import Message
+from app.models.group_model import GroupMember
+from app.models.message_model import Message, MessageDeletion
 from app.schemas.chat_schema import ChatCreate, ChatResponse, ChatParticipantResponse, GroupChatCreate
 
 router = APIRouter()
@@ -31,11 +32,14 @@ def format_chat_response(chat: Chat, db: Session, current_user_id=None):
                 is_online=user.is_online
             ))
 
-    # Last message
-    last_msg = db.query(Message).filter(
-        Message.chat_id == chat.id,
-        Message.is_deleted == False
-    ).order_by(Message.created_at.desc()).first()
+    # Last message (exclude messages deleted "for me")
+    last_q = db.query(Message).filter(Message.chat_id == chat.id)
+    if current_user_id:
+        last_q = last_q.filter(~exists().where(and_(
+            MessageDeletion.message_id == Message.id,
+            MessageDeletion.user_id == current_user_id,
+        )))
+    last_msg = last_q.order_by(Message.created_at.desc()).first()
 
     last_message_data = None
     if last_msg:
@@ -51,12 +55,17 @@ def format_chat_response(chat: Chat, db: Session, current_user_id=None):
     # Unread count — messages not sent by current user with status != 'read'
     unread_count = 0
     if current_user_id:
-        unread_count = db.query(func.count(Message.id)).filter(
+        unread_q = db.query(func.count(Message.id)).filter(
             Message.chat_id == chat.id,
             Message.sender_id != current_user_id,
             Message.status != 'read',
-            Message.is_deleted == False
-        ).scalar() or 0
+            Message.is_deleted_for_everyone == False,
+        )
+        unread_q = unread_q.filter(~exists().where(and_(
+            MessageDeletion.message_id == Message.id,
+            MessageDeletion.user_id == current_user_id,
+        )))
+        unread_count = unread_q.scalar() or 0
 
     group_picture_url = chat.group_picture or (chat.group_pic.file_url if chat.group_pic else None)
     group_creator_id = chat.group_created_by_id or chat.created_by
@@ -150,6 +159,7 @@ def create_group_chat(
         group_description=request.group_description,
         group_picture=request.group_picture,
         created_by=current_user.id,
+        group_created_by_id=current_user.id,
         updated_at=datetime.now(timezone.utc)
     )
     db.add(new_group)
@@ -163,6 +173,7 @@ def create_group_chat(
         role="admin"
     )
     db.add(creator_participant)
+    db.add(GroupMember(group_id=new_group.id, user_id=current_user.id, role="admin"))
     
     # Baaki saare participants ko member ke role ke sath add karo
     for participant_id in request.participant_ids:
@@ -173,6 +184,7 @@ def create_group_chat(
                 role="member"
             )
             db.add(participant)
+            db.add(GroupMember(group_id=new_group.id, user_id=participant_id, role="member"))
     
     db.commit()
     
@@ -243,6 +255,13 @@ def add_member(
 
     new_member = ChatParticipant(chat_id=chat_id, user_id=user_to_add, role="member")
     db.add(new_member)
+    # Keep group_members in sync
+    exists_gm = db.query(GroupMember).filter(
+        GroupMember.group_id == chat_id,
+        GroupMember.user_id == user_to_add,
+    ).first()
+    if not exists_gm:
+        db.add(GroupMember(group_id=chat_id, user_id=user_to_add, role="member"))
     db.commit()
     return {"message": "Member added successfully"}
 
@@ -320,6 +339,12 @@ def remove_member(
         raise HTTPException(status_code=404, detail="Member not found in this group")
 
     db.delete(member)
+    gm = db.query(GroupMember).filter(
+        GroupMember.group_id == chat_id,
+        GroupMember.user_id == user_id
+    ).first()
+    if gm:
+        db.delete(gm)
     db.commit()
     return {"message": "Removed from group"}
 
@@ -348,5 +373,11 @@ def promote_to_admin(
         raise HTTPException(status_code=404, detail="Member not found")
 
     member.role = "admin"
+    gm = db.query(GroupMember).filter(
+        GroupMember.group_id == chat_id,
+        GroupMember.user_id == user_id
+    ).first()
+    if gm:
+        gm.role = "admin"
     db.commit()
     return {"message": "Promoted to admin"}

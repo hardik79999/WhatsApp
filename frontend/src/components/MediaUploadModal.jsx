@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icons';
 
-function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' }) {
+function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', initialFile = null }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState('');
@@ -9,17 +9,44 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' })
   const [isDragActive, setIsDragActive] = useState(false);
   const fileInputRef = useRef(null);
 
+  const clearPreview = () => {
+    if (typeof preview === 'string' && preview.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(preview);
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  const setFile = (file) => {
+    clearPreview();
+    setSelectedFile(file);
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    if (type === 'document') {
+      // Any truthy value works; document renderer uses selectedFile only.
+      setPreview('doc');
+      return;
+    }
+    setPreview(URL.createObjectURL(file));
+  };
+
+  // Allow opening the modal with a pre-selected file (ChatInput flow)
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!initialFile) return;
+    setFile(initialFile);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, initialFile]);
+
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsDragActive(false);
-    setSelectedFile(file);
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    setFile(file);
   };
 
   const handleDrop = (e) => {
@@ -27,13 +54,7 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' })
     setIsDragActive(false);
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    setSelectedFile(file);
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPreview(reader.result);
-    };
-    reader.readAsDataURL(file);
+    setFile(file);
   };
 
   const handleDragOver = (e) => {
@@ -55,6 +76,7 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' })
       await handler(selectedFile, caption);
       handleClose();
     } catch (error) {
+      console.error('Failed to send media:', error);
       alert('Failed to send media');
     } finally {
       setUploading(false);
@@ -62,6 +84,7 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image' })
   };
 
   const handleClose = () => {
+    clearPreview();
     setSelectedFile(null);
     setPreview(null);
     setCaption('');

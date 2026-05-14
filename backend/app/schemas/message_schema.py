@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 
@@ -32,6 +32,15 @@ class ReplyPreview(BaseModel):
         from_attributes = True
 
 
+class ReactionPreview(BaseModel):
+    user_id: UUID
+    reaction: str
+    username: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class MessageResponse(BaseModel):
     id: UUID
     chat_id: UUID
@@ -45,6 +54,7 @@ class MessageResponse(BaseModel):
     duration: Optional[int] = None
     reply_to_message_id: Optional[UUID] = None
     replied_message: Optional[ReplyPreview] = None   # eagerly loaded for UI
+    reactions: List[ReactionPreview] = []
     is_edited: bool = False
     is_deleted: bool = False
     is_deleted_for_everyone: bool = False

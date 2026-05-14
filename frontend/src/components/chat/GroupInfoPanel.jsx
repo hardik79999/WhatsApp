@@ -22,6 +22,7 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
       onChatUpdated(data);
       setEditingName(false);
     } catch (err) {
+      console.error("Failed to update group name:", err);
       alert("Failed to update name");
     } finally {
       setLoading(false);
@@ -36,6 +37,7 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
       });
       onChatUpdated({ ...chat, participants: chat.participants.filter((p) => String(p.user_id) !== String(userId)) });
     } catch (err) {
+      console.error("Failed to remove member:", err);
       alert("Failed to remove member");
     }
   };
@@ -52,6 +54,7 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
         ),
       });
     } catch (err) {
+      console.error("Failed to promote member:", err);
       alert("Failed to promote member");
     }
   };
@@ -64,6 +67,7 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
       });
       onLeaveGroup(chat.id);
     } catch (err) {
+      console.error("Failed to leave group:", err);
       alert("Failed to leave group");
     }
   };

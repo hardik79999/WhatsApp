@@ -1,5 +1,3 @@
-import React from 'react';
-
 function Chat({ onLogout }) {
   return (
     // Main Background (WhatsApp Web style light background)

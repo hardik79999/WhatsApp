@@ -1,4 +1,3 @@
-import React from 'react';
 import { Icon } from './Icons';
 
 // Clock icon for pending/sending state

@@ -36,7 +36,7 @@ ALLOWED_TYPES: dict[str, tuple[str, str]] = {
 }
 
 # Allowed folder names — used to validate path parameters
-ALLOWED_FOLDERS = {"images", "videos", "audios", "documents"}
+ALLOWED_FOLDERS = {"images", "videos", "audios", "documents", "voice"}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
@@ -131,6 +131,64 @@ async def upload_media(
         file_size=media.file_size,
         filename=media.file_name,
         thumbnail_url=media.thumbnail_url,
+    )
+
+
+@router.post("/voice", response_model=MediaUploadResponse)
+async def upload_voice_note(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contents = await file.read()
+    file_size = len(contents)
+
+    if file_size == 0:
+        raise HTTPException(status_code=400, detail="Empty voice note")
+
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="Voice note too large")
+
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    
+    # We allow standard audio types from MediaRecorder
+    allowed_voice_types = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav"}
+    if content_type not in allowed_voice_types and not content_type.startswith("audio/"):
+        raise HTTPException(status_code=400, detail=f"Unsupported voice type: {content_type}")
+
+    folder_path = MEDIA_DIR / "voice"
+    folder_path.mkdir(exist_ok=True)
+
+    original_suffix = Path(file.filename or "voice").suffix.lower()
+    safe_suffixes = {".webm", ".ogg", ".mp4", ".mp3", ".wav"}
+    suffix = original_suffix if original_suffix in safe_suffixes else ".webm"
+    unique_name = f"voice_{uuid.uuid4()}{suffix}"
+    file_path = folder_path / unique_name
+
+    async with aiofiles.open(file_path, "wb") as f:
+        await f.write(contents)
+
+    file_url = f"{BASE_URL}/media/voice/{unique_name}"
+
+    media = MediaUpload(
+        uploaded_by_id=current_user.id,
+        file_name=file.filename or unique_name,
+        file_type="audio",
+        mime_type=content_type,
+        file_size=file_size,
+        file_url=file_url,
+        file_path=str(file_path),
+    )
+    db.add(media)
+    db.commit()
+    db.refresh(media)
+
+    return MediaUploadResponse(
+        id=media.id,
+        media_url=media.file_url,
+        file_type=media.file_type,
+        file_size=media.file_size,
+        filename=media.file_name,
     )
 
 

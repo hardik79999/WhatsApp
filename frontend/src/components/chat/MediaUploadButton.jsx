@@ -1,29 +1,15 @@
 import { useRef } from "react";
-import api from "../../api";
 
 const ACCEPT = "image/*,video/mp4,video/webm,audio/*,application/pdf,.doc,.docx";
 
-export default function MediaUploadButton({ onUpload, disabled }) {
+export default function MediaUploadButton({ onSelectFile, disabled }) {
   const inputRef = useRef(null);
 
   const handleChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      const { data } = await api.post("/media/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-        withCredentials: true,
-      });
-      onUpload(data);
-    } catch (err) {
-      console.error("Upload failed:", err);
-      alert("Upload failed. Please try again.");
-    }
+    onSelectFile?.(file);
   };
 
   return (

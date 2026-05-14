@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
 import api from '../api';
@@ -28,7 +28,7 @@ function CreateGroupPanel({
     if (isOpen && onLoadContacts && contacts.length === 0) {
       onLoadContacts();
     }
-  }, [isOpen]);
+  }, [isOpen, onLoadContacts, contacts.length]);
 
   const filteredContacts = contacts.filter((c) =>
     !searchQuery.trim() || c.saved_name?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -436,7 +436,7 @@ function CreateGroupPanel({
             )}
             <button
               onClick={handleCreate}
-              disabled={creating || !groupName.trim()}
+              disabled={creating || avatarUploading || !groupName.trim()}
               style={{
                 width:'100%',
                 background: groupName.trim() ? '#00a884' : '#2a3942',
@@ -447,11 +447,11 @@ function CreateGroupPanel({
                 fontSize:15,
                 fontWeight:500,
                 cursor: groupName.trim() ? 'pointer' : 'not-allowed',
-                opacity: creating ? 0.6 : 1,
+                opacity: creating || avatarUploading ? 0.6 : 1,
                 transition:'background .2s'
               }}
             >
-              {creating ? 'Creating...' : 'Create Group'}
+              {avatarUploading ? 'Uploading avatar...' : creating ? 'Creating...' : 'Create Group'}
             </button>
           </div>
         </>

@@ -9,6 +9,7 @@ from app.api.deps import get_current_user
 from app.models.user_model import User
 from app.models.reaction_model import MessageReaction
 from app.models.message_model import Message
+from app.models.chat_model import ChatParticipant
 from app.websocket.manager import manager
 
 router = APIRouter()
@@ -40,6 +41,14 @@ async def add_reaction(
     message = db.query(Message).filter(Message.id == request.message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
+
+    # Permission: user must be a participant of the message's chat
+    is_participant = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == message.chat_id,
+        ChatParticipant.user_id == current_user.id,
+    ).first()
+    if not is_participant:
+        raise HTTPException(status_code=403, detail="You are not in this chat")
     
     # Check if user already reacted
     existing_reaction = db.query(MessageReaction).filter(
@@ -65,15 +74,25 @@ async def add_reaction(
         db.refresh(new_reaction)
         reaction = new_reaction
     
-    # Broadcast reaction to chat participants
-    await manager.broadcast({
-        "type": "message_reaction",
-        "message_id": str(request.message_id),
-        "user_id": str(current_user.id),
-        "username": current_user.username,
-        "reaction": request.reaction,
-        "chat_id": str(message.chat_id)
-    })
+    participant_ids = [
+        str(r.user_id)
+        for r in db.query(ChatParticipant.user_id).filter(
+            ChatParticipant.chat_id == message.chat_id
+        ).all()
+    ]
+
+    # Broadcast reaction only to chat participants
+    await manager.broadcast_to_chat(
+        {
+            "type": "message_reaction",
+            "message_id": str(request.message_id),
+            "user_id": str(current_user.id),
+            "username": current_user.username or current_user.phone,
+            "reaction": request.reaction,
+            "chat_id": str(message.chat_id),
+        },
+        participant_ids,
+    )
     
     return {
         "id": reaction.id,
@@ -101,17 +120,38 @@ async def remove_reaction(
         raise HTTPException(status_code=404, detail="Reaction not found")
     
     message = db.query(Message).filter(Message.id == message_id).first()
+
+    if message:
+        is_participant = db.query(ChatParticipant).filter(
+            ChatParticipant.chat_id == message.chat_id,
+            ChatParticipant.user_id == current_user.id,
+        ).first()
+        if not is_participant:
+            raise HTTPException(status_code=403, detail="You are not in this chat")
     
     db.delete(reaction)
     db.commit()
     
-    # Broadcast reaction removal
-    await manager.broadcast({
-        "type": "message_reaction_removed",
-        "message_id": str(message_id),
-        "user_id": str(current_user.id),
-        "chat_id": str(message.chat_id) if message else None
-    })
+    participant_ids = []
+    if message:
+        participant_ids = [
+            str(r.user_id)
+            for r in db.query(ChatParticipant.user_id).filter(
+                ChatParticipant.chat_id == message.chat_id
+            ).all()
+        ]
+
+    # Broadcast reaction removal only to chat participants
+    if participant_ids:
+        await manager.broadcast_to_chat(
+            {
+                "type": "message_reaction_removed",
+                "message_id": str(message_id),
+                "user_id": str(current_user.id),
+                "chat_id": str(message.chat_id),
+            },
+            participant_ids,
+        )
     
     return {"message": "Reaction removed"}
 
@@ -124,6 +164,17 @@ def get_message_reactions(
     """
     Get all reactions for a message
     """
+    # Permission: current user must be a participant of the message's chat
+    msg = db.query(Message).filter(Message.id == message_id).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    is_participant = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == msg.chat_id,
+        ChatParticipant.user_id == current_user.id,
+    ).first()
+    if not is_participant:
+        raise HTTPException(status_code=403, detail="You are not in this chat")
+
     reactions = db.query(MessageReaction).filter(
         MessageReaction.message_id == message_id
     ).all()

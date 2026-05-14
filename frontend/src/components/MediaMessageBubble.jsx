@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import MessageTicks from './MessageTicks';
 import { Icon } from './Icons';
 

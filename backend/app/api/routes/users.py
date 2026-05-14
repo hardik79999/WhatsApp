@@ -1,14 +1,14 @@
-import shutil
 import uuid
+import os
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
-from app.schemas.user_schema import UserResponse
 from app.schemas.user_schema import UserResponse, UserUpdate # UserUpdate import kar lena
 
 router = APIRouter()
@@ -60,18 +60,31 @@ def upload_profile_picture(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    allowed_types = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+    content_type = (file.content_type or "").split(";")[0].strip().lower()
+    if content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Unsupported image type")
+
+    max_size = 10 * 1024 * 1024  # 10 MB
+    contents = file.file.read()
+    if not contents or len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Empty file")
+    if len(contents) > max_size:
+        raise HTTPException(status_code=413, detail="File too large. Max 10 MB")
+
     # Unique naam generate karo image ke liye taaki purani overwrite na ho
-    file_extension = file.filename.split(".")[-1]
-    new_filename = f"{uuid.uuid4()}.{file_extension}"
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        suffix = ".jpg"
+    new_filename = f"{uuid.uuid4()}{suffix}"
     file_location = f"uploads/profiles/{new_filename}"
-    
-    # Image ko local folder mein save karo
-    with open(file_location, "wb+") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-        
-    # Database mein image ka URL save kardo 
-    # (Abhi localhost hai, production me asli domain aayega)
-    current_user.profile_pic = f"http://localhost:8000/uploads/profiles/{new_filename}"
+
+    os.makedirs("uploads/profiles", exist_ok=True)
+    with open(file_location, "wb") as buffer:
+        buffer.write(contents)
+
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    current_user.profile_pic = f"{base_url}/uploads/profiles/{new_filename}"
     db.commit()
     db.refresh(current_user)
     

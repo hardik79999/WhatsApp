@@ -8,16 +8,15 @@
 //   remoteUser  – { id, username, profile_pic }
 //   isCaller    – bool
 //   ws          – live WebSocket instance from App.jsx
-//   localUserId – current user's id
 //   onEnd       – () => void
 
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWebRTC } from "../hooks/useWebRTC";
 import Avatar from "./Avatar";
 import api from "../api";
 
 export default function CallScreen({
-  callId, callType, remoteUser, isCaller, ws, localUserId, onEnd,
+  callId, callType, remoteUser, isCaller, ws, onEnd,
 }) {
   const localVideoRef  = useRef(null);
   const remoteVideoRef = useRef(null);
@@ -25,9 +24,20 @@ export default function CallScreen({
   const [duration,     setDuration]     = useState(0);
   const timerRef = useRef(null);
 
-  const rtc = useWebRTC({
+  const {
+    localStream,
+    remoteStream,
+    isMuted,
+    isCamOff,
+    startAsCallerAfterAccept,
+    handleOffer,
+    handleAnswer,
+    handleIceCandidate,
+    toggleMute,
+    toggleCamera,
+    hangUp,
+  } = useWebRTC({
     callId,
-    localUserId,
     remoteUserId: remoteUser?.id,
     callType,
     ws,
@@ -35,32 +45,38 @@ export default function CallScreen({
 
   // ── Attach streams to video elements ─────────────────────
   useEffect(() => {
-    if (localVideoRef.current && rtc.localStream) {
-      localVideoRef.current.srcObject = rtc.localStream;
-    }
-  }, [rtc.localStream]);
+    const el = localVideoRef.current;
+    if (el && localStream) el.srcObject = localStream;
+  }, [localStream]);
 
   useEffect(() => {
-    if (remoteVideoRef.current && rtc.remoteStream) {
-      remoteVideoRef.current.srcObject = rtc.remoteStream;
+    const el = remoteVideoRef.current;
+    if (el && remoteStream) {
+      el.srcObject = remoteStream;
       setStatus("Connected");
-      timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+      if (!timerRef.current) {
+        timerRef.current = setInterval(() => setDuration(d => d + 1), 1000);
+      }
     }
-  }, [rtc.remoteStream]);
+  }, [remoteStream]);
 
   // ── Start or answer on mount ──────────────────────────────
   useEffect(() => {
+    const localEl = localVideoRef.current;
+    const remoteEl = remoteVideoRef.current;
+
     // Caller: waits for call_accepted WS event before sending offer (handled below).
     // Callee: waits for webrtc_offer WS event (handled below).
     // Nothing to do here on mount — the WS listener drives everything.
 
     return () => {
       clearInterval(timerRef.current);
-      rtc.hangUp();
-      if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      timerRef.current = null;
+      hangUp();
+      if (localEl) localEl.srcObject = null;
+      if (remoteEl) remoteEl.srcObject = null;
     };
-  }, []); // eslint-disable-line
+  }, [hangUp]);
 
   // ── Listen for WebRTC signaling events on the WS ─────────
   useEffect(() => {
@@ -74,31 +90,32 @@ export default function CallScreen({
         case "call_accepted":
           // Caller now sends the WebRTC offer
           if (isCaller) {
-            rtc.startAsCallerAfterAccept().catch(console.error);
+            startAsCallerAfterAccept().catch(console.error);
           }
           break;
 
         case "webrtc_offer":
           // Receiver gets the offer (in case offerSdp wasn't passed as prop)
           if (!isCaller) {
-            rtc.handleOffer(data.sdp).catch(console.error);
+            handleOffer(data.sdp).catch(console.error);
           }
           break;
 
         case "webrtc_answer":
           if (isCaller) {
-            rtc.handleAnswer(data.sdp).catch(console.error);
+            handleAnswer(data.sdp).catch(console.error);
           }
           break;
 
         case "webrtc_ice_candidate":
-          rtc.handleIceCandidate(data.candidate).catch(console.error);
+          handleIceCandidate(data.candidate).catch(console.error);
           break;
 
         case "call_ended":
         case "call_rejected":
           clearInterval(timerRef.current);
-          rtc.hangUp();
+          timerRef.current = null;
+          hangUp();
           onEnd();
           break;
 
@@ -109,7 +126,17 @@ export default function CallScreen({
 
     ws.addEventListener("message", onMessage);
     return () => ws.removeEventListener("message", onMessage);
-  }, [ws, callId, isCaller, rtc, onEnd]); // eslint-disable-line
+  }, [
+    ws,
+    callId,
+    isCaller,
+    startAsCallerAfterAccept,
+    handleOffer,
+    handleAnswer,
+    handleIceCandidate,
+    hangUp,
+    onEnd,
+  ]);
 
   // ── Hang up button handler ────────────────────────────────
   const handleEnd = async () => {
@@ -119,9 +146,24 @@ export default function CallScreen({
       console.error("End call API error:", e);
     }
     clearInterval(timerRef.current);
-    rtc.hangUp();
+    timerRef.current = null;
+    hangUp();
     onEnd();
   };
+
+  // ── Handle page refresh / close ───────────────────────────
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Synchronously tell the backend to end the call before the page dies
+      const token = localStorage.getItem('csrf_access_token') || sessionStorage.getItem('csrf_access_token');
+      if (token) {
+        // Use sendBeacon for reliable delivery during page unload
+        navigator.sendBeacon(`/api/v1/calls/${callId}/end`, new Blob([], { type: 'application/json' }));
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [callId]);
 
   const fmt = (s) => {
     const m = Math.floor(s / 60).toString().padStart(2, "0");
@@ -136,8 +178,8 @@ export default function CallScreen({
       display: "flex", flexDirection: "column",
       alignItems: "center", justifyContent: "center",
     }}>
-      {/* Remote video (full screen for video calls) */}
-      {callType === "video" && (
+      {/* Remote video/audio */}
+      {callType === "video" ? (
         <video
           ref={remoteVideoRef}
           autoPlay playsInline
@@ -149,6 +191,8 @@ export default function CallScreen({
             transition: "opacity 0.5s",
           }}
         />
+      ) : (
+        <audio ref={remoteVideoRef} autoPlay playsInline style={{ display: "none" }} />
       )}
 
       {/* Avatar / status overlay */}
@@ -189,7 +233,7 @@ export default function CallScreen({
             width: 120, height: 180, borderRadius: 12,
             objectFit: "cover", zIndex: 11,
             border: "2px solid rgba(255,255,255,0.2)",
-            display: rtc.isCamOff ? "none" : "block",
+            display: isCamOff ? "none" : "block",
           }}
         />
       )}
@@ -201,19 +245,19 @@ export default function CallScreen({
       }}>
         {/* Mute */}
         <ControlBtn
-          active={rtc.isMuted}
-          label={rtc.isMuted ? "Unmute" : "Mute"}
-          onClick={rtc.toggleMute}
-          icon={rtc.isMuted ? "🔇" : "🎤"}
+          active={isMuted}
+          label={isMuted ? "Unmute" : "Mute"}
+          onClick={toggleMute}
+          icon={isMuted ? "🔇" : "🎤"}
         />
 
         {/* Camera toggle (video only) */}
         {callType === "video" && (
           <ControlBtn
-            active={rtc.isCamOff}
-            label={rtc.isCamOff ? "Cam On" : "Cam Off"}
-            onClick={rtc.toggleCamera}
-            icon={rtc.isCamOff ? "📷" : "📹"}
+            active={isCamOff}
+            label={isCamOff ? "Cam On" : "Cam Off"}
+            onClick={toggleCamera}
+            icon={isCamOff ? "📷" : "📹"}
           />
         )}
 

@@ -23,7 +23,7 @@ const ICE_SERVERS = {
   ],
 };
 
-export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
+export function useWebRTC({ callId, remoteUserId, callType, ws }) {
   const [localStream,  setLocalStream]  = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
   const [isMuted,      setIsMuted]      = useState(false);
@@ -66,10 +66,16 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
     stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
     // Remote track → set remoteStream state
-    const remoteMediaStream = new MediaStream();
-    setRemoteStream(remoteMediaStream);
     pc.ontrack = (e) => {
-      e.streams[0].getTracks().forEach(t => remoteMediaStream.addTrack(t));
+      if (e.streams && e.streams.length > 0) {
+        setRemoteStream(e.streams[0]);
+      } else {
+        setRemoteStream(prev => {
+          const stream = prev || new MediaStream();
+          stream.addTrack(e.track);
+          return stream;
+        });
+      }
     };
 
     // ICE candidate → send to peer via WS
@@ -188,6 +194,16 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
     // Stop all local tracks
     localStreamRef.current?.getTracks().forEach(t => t.stop());
     localStreamRef.current = null;
+    
+    // Stop remote tracks
+    if (pcRef.current) {
+      pcRef.current.getReceivers().forEach(receiver => {
+        if (receiver.track) {
+          receiver.track.stop();
+        }
+      });
+    }
+
     setLocalStream(null);
     setRemoteStream(null);
 
@@ -196,12 +212,14 @@ export function useWebRTC({ callId, localUserId, remoteUserId, callType, ws }) {
     remoteDescSet.current = false;
 
     // Close RTCPeerConnection
-    pcRef.current?.close();
-    pcRef.current = null;
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
   }, []);
 
   // Cleanup on unmount
-  useEffect(() => () => hangUp(), []);  // eslint-disable-line
+  useEffect(() => () => hangUp(), [hangUp]);
 
   return {
     localStream,

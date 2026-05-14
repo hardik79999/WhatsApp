@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, exists
 from typing import List
 from uuid import UUID
 from datetime import datetime, timezone
@@ -8,7 +9,8 @@ from app.core.database import get_db
 from app.api.deps import get_current_user
 from app.models.user_model import User
 from app.models.chat_model import ChatParticipant, Chat
-from app.models.message_model import Message, StarredMessage
+from app.models.message_model import Message, StarredMessage, MessageDeletion
+from app.models.reaction_model import MessageReaction
 from app.schemas.message_schema import MessageCreate, MessageEdit, MessageResponse
 from app.websocket.manager import manager
 
@@ -124,6 +126,15 @@ async def send_message(
         exclude_user_id=str(current_user.id),
     )
 
+    # Delivery receipts (direct chats only): if the other user is currently online,
+    # promote status from "sent" → "delivered" for the sender's UI.
+    if chat and not chat.is_group and new_message.status == "sent":
+        other_ids = [uid for uid in participant_ids if uid != str(current_user.id)]
+        if other_ids and await manager.is_online(other_ids[0]):
+            new_message.status = "delivered"
+            db.commit()
+            db.refresh(new_message)
+
     # Eagerly load replied_message for the response
     db.refresh(new_message)
     return new_message
@@ -141,10 +152,19 @@ def get_messages(
 ):
     _assert_participant(db, chat_id, current_user.id)
 
+    deleted_for_me = exists().where(and_(
+        MessageDeletion.message_id == Message.id,
+        MessageDeletion.user_id == current_user.id,
+    ))
+
     messages = (
         db.query(Message)
-        .options(joinedload(Message.replied_message))
+        .options(
+            joinedload(Message.replied_message),
+            joinedload(Message.reactions).joinedload(MessageReaction.user),
+        )
         .filter(Message.chat_id == chat_id)
+        .filter(~deleted_for_me)
         .order_by(Message.created_at.asc())
         .all()
     )
@@ -207,21 +227,19 @@ async def delete_message(
     message = db.query(Message).filter(Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    if str(message.sender_id) != str(current_user.id):
-        raise HTTPException(status_code=403, detail="Can only delete your own messages")
 
-    message.is_deleted = True
-    message.deleted_at = datetime.now(timezone.utc)
-
+    # Delete for everyone (WhatsApp semantics): only the sender can do this.
     if delete_for_everyone:
+        if str(message.sender_id) != str(current_user.id):
+            raise HTTPException(status_code=403, detail="Can only delete for everyone if you sent the message")
+
         message.is_deleted_for_everyone = True
+        message.deleted_at = datetime.now(timezone.utc)
         message.content = "This message was deleted"
         message.media_url = None
         message.thumbnail_url = None
+        db.commit()
 
-    db.commit()
-
-    if delete_for_everyone:
         participant_ids = _get_participant_ids(db, message.chat_id)
         await manager.broadcast_to_chat(
             {
@@ -232,7 +250,19 @@ async def delete_message(
             participant_ids,
         )
 
-    return {"message": "Deleted"}
+        return {"message": "Deleted for everyone"}
+
+    # Delete for me: any chat participant can hide a message from their own view.
+    _assert_participant(db, message.chat_id, current_user.id)
+    existing = db.query(MessageDeletion).filter(
+        MessageDeletion.user_id == current_user.id,
+        MessageDeletion.message_id == message_id,
+    ).first()
+    if not existing:
+        db.add(MessageDeletion(user_id=current_user.id, message_id=message_id))
+        db.commit()
+
+    return {"message": "Deleted for me"}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -281,8 +311,15 @@ def get_starred_messages(
         return []
     messages = (
         db.query(Message)
-        .options(joinedload(Message.replied_message))
+        .options(
+            joinedload(Message.replied_message),
+            joinedload(Message.reactions).joinedload(MessageReaction.user),
+        )
         .filter(Message.id.in_(ids))
+        .filter(~exists().where(and_(
+            MessageDeletion.message_id == Message.id,
+            MessageDeletion.user_id == current_user.id,
+        )))
         .order_by(Message.created_at.desc())
         .all()
     )

@@ -66,26 +66,31 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
   const [pan,    setPan]    = useState({ x: 0, y: 0 });
   const [starred, setStarred] = useState({});
   const [showCaption, setShowCaption] = useState(false);
-  const dragging = useRef(false);
+  const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
   const panStart  = useRef({ x: 0, y: 0 });
 
   const current = images[idx];
 
-  // Reset zoom/pan when image changes
-  useEffect(() => {
+  const resetView = useCallback(() => {
     setZoom(1);
     setPan({ x: 0, y: 0 });
-  }, [idx]);
+    setIsDragging(false);
+  }, []);
+
+  const setIndex = useCallback((next) => {
+    setIdx((currentIdx) => (typeof next === "function" ? next(currentIdx) : next));
+    resetView();
+  }, [resetView]);
 
   // Keyboard navigation
   const handleKey = useCallback((e) => {
     if (e.key === "Escape")      onClose();
-    if (e.key === "ArrowRight")  setIdx(i => Math.min(i + 1, images.length - 1));
-    if (e.key === "ArrowLeft")   setIdx(i => Math.max(i - 1, 0));
+    if (e.key === "ArrowRight")  setIndex(i => Math.min(i + 1, images.length - 1));
+    if (e.key === "ArrowLeft")   setIndex(i => Math.max(i - 1, 0));
     if (e.key === "+")           setZoom(z => Math.min(z + 0.25, 4));
     if (e.key === "-")           setZoom(z => Math.max(z - 0.25, 0.5));
-  }, [images.length, onClose]);
+  }, [images.length, onClose, setIndex]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKey);
@@ -101,18 +106,20 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
   // Drag-to-pan (only when zoomed in)
   const onMouseDown = (e) => {
     if (zoom <= 1) return;
-    dragging.current = true;
+    setIsDragging(true);
     dragStart.current = { x: e.clientX, y: e.clientY };
     panStart.current  = { ...pan };
   };
   const onMouseMove = (e) => {
-    if (!dragging.current) return;
+    if (!isDragging) return;
     setPan({
       x: panStart.current.x + (e.clientX - dragStart.current.x),
       y: panStart.current.y + (e.clientY - dragStart.current.y),
     });
   };
-  const onMouseUp = () => { dragging.current = false; };
+  const onMouseUp = () => {
+    setIsDragging(false);
+  };
 
   const download = () => {
     const a = document.createElement("a");
@@ -226,7 +233,7 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
         {/* Prev arrow */}
         <div style={{ position: "absolute", left: 12 }}>
           {navBtn(
-            () => setIdx(i => Math.max(i - 1, 0)),
+            () => setIndex(i => Math.max(i - 1, 0)),
             idx === 0,
             <Ico.ChevronLeft />
           )}
@@ -244,7 +251,7 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
             objectFit: "contain",
             borderRadius: 4,
             transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
-            transition: dragging.current ? "none" : "transform .15s ease",
+            transition: isDragging ? "none" : "transform .15s ease",
             userSelect: "none",
             pointerEvents: "none",
           }}
@@ -267,7 +274,7 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
         {/* Next arrow */}
         <div style={{ position: "absolute", right: 12 }}>
           {navBtn(
-            () => setIdx(i => Math.min(i + 1, images.length - 1)),
+            () => setIndex(i => Math.min(i + 1, images.length - 1)),
             idx === images.length - 1,
             <Ico.ChevronRight />
           )}
@@ -286,7 +293,7 @@ export default function ImageLightbox({ images, startIndex = 0, senderName, onCl
           {images.map((img, i) => (
             <button
               key={i}
-              onClick={() => setIdx(i)}
+              onClick={() => setIndex(i)}
               style={{
                 width: 60, height: 60, flexShrink: 0,
                 padding: 0, border: "none", cursor: "pointer",

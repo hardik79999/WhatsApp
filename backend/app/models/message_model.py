@@ -41,6 +41,7 @@ class Message(Base):
     # Relationships
     chat = relationship("Chat", back_populates="messages")
     media = relationship("MediaUpload", backref="messages")
+    reactions = relationship("MessageReaction", back_populates="message", cascade="all, delete-orphan")
     # Ye SQLAlchemy ko batayega ki ye relationship table ke andar hi (self) hai
     replied_message = relationship("Message", remote_side=[id])
 
@@ -65,3 +66,15 @@ class MessageStatus(Base):
 
     status = Column(String, default="sent") # sent, delivered, read
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())    
+
+
+class MessageDeletion(Base):
+    """
+    Per-user deletion ("Delete for me") support.
+    WhatsApp semantics: deleting a message for yourself should not affect other participants.
+    """
+    __tablename__ = "message_deletions"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True)
+    deleted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=True)

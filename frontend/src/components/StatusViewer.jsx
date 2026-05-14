@@ -7,7 +7,7 @@ export default function StatusViewer({ groups, initialGroup = 0, onClose }) {
   const [groupIdx, setGroupIdx]   = useState(initialGroup);
   const [slideIdx, setSlideIdx]   = useState(0);
   const [progress, setProgress]   = useState(0);
-  const [paused,   setPaused]     = useState(false);
+  const [,         setPaused]     = useState(false);
 
   const intervalRef  = useRef(null);
   const startTimeRef = useRef(null);
@@ -23,42 +23,6 @@ export default function StatusViewer({ groups, initialGroup = 0, onClose }) {
     if (currentSlide.is_viewed) return;
     api.post(`/statuses/${currentSlide.id}/view`).catch(() => {});
   }, [currentSlide?.id]);
-
-  // ── Progress ticker ───────────────────────────────────────
-  const startTimer = useCallback(() => {
-    clearInterval(intervalRef.current);
-    startTimeRef.current = Date.now();
-    intervalRef.current = setInterval(() => {
-      const elapsed = elapsedRef.current + (Date.now() - startTimeRef.current);
-      const pct = Math.min((elapsed / STATUS_DURATION_MS) * 100, 100);
-      setProgress(pct);
-      if (pct >= 100) {
-        clearInterval(intervalRef.current);
-        goNext();
-      }
-    }, 50);
-  }, [groupIdx, slideIdx]); // eslint-disable-line
-
-  const pauseTimer = () => {
-    clearInterval(intervalRef.current);
-    elapsedRef.current += Date.now() - startTimeRef.current;
-    setPaused(true);
-  };
-
-  const resumeTimer = () => {
-    startTimeRef.current = Date.now();
-    setPaused(false);
-    startTimer();
-  };
-
-  // Reset and start when slide changes
-  useEffect(() => {
-    elapsedRef.current = 0;
-    setProgress(0);
-    setPaused(false);
-    startTimer();
-    return () => clearInterval(intervalRef.current);
-  }, [groupIdx, slideIdx]);
 
   // ── Navigation ────────────────────────────────────────────
   const goNext = useCallback(() => {
@@ -81,6 +45,42 @@ export default function StatusViewer({ groups, initialGroup = 0, onClose }) {
       setSlideIdx(groups[groupIdx - 1].statuses.length - 1);
     }
   }, [slideIdx, groupIdx, groups]);
+
+  // ── Progress ticker ───────────────────────────────────────
+  const startTimer = useCallback(() => {
+    clearInterval(intervalRef.current);
+    startTimeRef.current = Date.now();
+    intervalRef.current = setInterval(() => {
+      const elapsed = elapsedRef.current + (Date.now() - startTimeRef.current);
+      const pct = Math.min((elapsed / STATUS_DURATION_MS) * 100, 100);
+      setProgress(pct);
+      if (pct >= 100) {
+        clearInterval(intervalRef.current);
+        goNext();
+      }
+    }, 50);
+  }, [goNext]);
+
+  const pauseTimer = () => {
+    clearInterval(intervalRef.current);
+    elapsedRef.current += Date.now() - startTimeRef.current;
+    setPaused(true);
+  };
+
+  const resumeTimer = () => {
+    startTimeRef.current = Date.now();
+    setPaused(false);
+    startTimer();
+  };
+
+  // Reset and start when slide changes
+  useEffect(() => {
+    elapsedRef.current = 0;
+    setProgress(0);
+    setPaused(false);
+    startTimer();
+    return () => clearInterval(intervalRef.current);
+  }, [groupIdx, slideIdx]);
 
   // Keyboard support
   useEffect(() => {

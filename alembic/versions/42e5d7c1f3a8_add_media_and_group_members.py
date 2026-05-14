@@ -1,7 +1,7 @@
 """Add media uploads table and group membership metadata
 
 Revision ID: 42e5d7c1f3a8
-Revises: a5be8e718de8
+Revises: dbe47bab89ea
 Create Date: 2026-05-14 12:00:00.000000
 """
 from alembic import op
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 revision = '42e5d7c1f3a8'
 down_revision = 'dbe47bab89ea'
 branch_labels = None
-depend_on = None
+depends_on = None
 
 
 def upgrade() -> None:

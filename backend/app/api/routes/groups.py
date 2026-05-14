@@ -12,6 +12,8 @@ from app.models.chat_model import Chat, ChatParticipant
 from app.models.group_model import GroupMember
 from app.models.media_model import MediaUpload
 from app.websocket.manager import manager
+from app.schemas.chat_schema import ChatResponse
+from app.api.routes.chats import format_chat_response
 
 router = APIRouter()
 
@@ -66,7 +68,7 @@ class GroupMemberResponse(BaseModel):
 
 # ── POST /create ──────────────────────────────────────────────────────────────
 
-@router.post("/create")
+@router.post("/create", response_model=ChatResponse)
 def create_group(
     payload: GroupCreateRequest,
     db: Session = Depends(get_db),
@@ -76,8 +78,7 @@ def create_group(
         raise HTTPException(status_code=400, detail="Group name is required")
 
     # Deduplicate and exclude creator from the list
-    unique_ids = list({str(pid) for pid in payload.participant_ids
-                       if str(pid) != str(current_user.id)})
+    unique_ids = list({pid for pid in payload.participant_ids if pid != current_user.id})
 
     if not unique_ids:
         raise HTTPException(status_code=400, detail="Select at least one additional member")
@@ -117,14 +118,7 @@ def create_group(
     db.commit()
     db.refresh(new_group)
 
-    return {
-        "id": str(new_group.id),
-        "group_name": new_group.group_name,
-        "group_description": new_group.group_description,
-        "group_pic_id": str(new_group.group_pic_id) if new_group.group_pic_id else None,
-        "created_by": str(new_group.group_created_by_id),
-        "is_group": True,
-    }
+    return format_chat_response(new_group, db, current_user.id)
 
 
 # ── POST /{group_id}/add-members ──────────────────────────────────────────────

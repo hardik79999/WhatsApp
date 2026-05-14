@@ -1,5 +1,3 @@
-import React from 'react';
-
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '👏', '🔥'];
 
 function ReactionPicker({ isOpen, position, onSelect, onClose }) {
