@@ -28,6 +28,7 @@ class Message(Base):
     edited_at = Column(DateTime(timezone=True), nullable=True)
 
     is_deleted = Column(Boolean, default=False)
+    is_deleted_for_everyone = Column(Boolean, default=False)
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     status = Column(String, default="sent") # "sent", "delivered", ya "read"
@@ -41,6 +42,15 @@ class Message(Base):
     replied_message = relationship("Message", remote_side=[id])
 
 
+
+
+class StarredMessage(Base):
+    """Association table: a user can star any message."""
+    __tablename__ = "starred_messages"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    message_id = Column(UUID(as_uuid=True), ForeignKey("messages.id", ondelete="CASCADE"), primary_key=True)
+    starred_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
 class MessageStatus(Base):
