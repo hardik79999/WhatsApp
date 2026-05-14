@@ -203,3 +203,35 @@ def get_chat_details(
         raise HTTPException(status_code=404, detail="Chat nahi mila")
     
     return format_chat_response(chat, db, current_user.id)
+
+# Group mein naye log add karne ke liye (Admin only)
+@router.post("/{chat_id}/participants")
+def add_member(
+    chat_id: UUID,
+    user_to_add: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Check if current user is admin
+    admin_check = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id, 
+        ChatParticipant.user_id == current_user.id,
+        ChatParticipant.role == "admin"
+    ).first()
+    
+    if not admin_check:
+        raise HTTPException(status_code=403, detail="Sirf admin hi naye members add kar sakta hai")
+
+    # Check if user is already a member
+    existing_member = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.user_id == user_to_add
+    ).first()
+    
+    if existing_member:
+        return {"message": "Member is already in the group"}
+
+    new_member = ChatParticipant(chat_id=chat_id, user_id=user_to_add, role="member")
+    db.add(new_member)
+    db.commit()
+    return {"message": "Member added successfully"}

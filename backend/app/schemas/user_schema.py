@@ -21,3 +21,8 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True # SQLAlchemy model ko JSON mein convert karne ke liye zaroori
+
+
+class UserUpdate(BaseModel):
+    username: Optional[str] = None
+    bio: Optional[str] = None

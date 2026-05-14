@@ -5,6 +5,7 @@ from app.api.routes import auth, users, chats, contacts, messages, websocket, me
 
 from app.core.config import settings
 import app.models
+import os
 
 # FastAPI instance create karna
 app = FastAPI(
@@ -21,9 +22,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+os.makedirs("uploads/profiles", exist_ok=True)
 
 # Mount media directory for serving uploaded files
 app.mount("/media", StaticFiles(directory="media"), name="media")
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 # Auth router ko API mein add karna
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
