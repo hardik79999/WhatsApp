@@ -1,43 +1,42 @@
-import React, { useContext } from 'react';
-import { Icon } from './Icons';
+// frontend/src/components/CallButton.jsx
+// Used in ChatWindow header for 1-on-1 chats.
+// Initiates a call via REST, then the receiver gets an "incoming_call" WS event.
 
-/**
- * CallButton
- * Props:
- *   contactId      – remote user's DB id
- *   contactUser    – remote user object { id, username, profile_pic, … }
- *   callType       – 'audio' | 'video'
- *   ws             – live WebSocket ref (passed down from App)
- *   onCallStarted  – (callId, callType, contactUser) => void
- */
+import React, { useState } from "react";
+import { Icon } from "./Icons";
+import api from "../api";
+
 function CallButton({ contactId, contactUser, callType, ws, onCallStarted }) {
-  const handleClick = () => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      alert('Connection not ready. Please try again.');
-      return;
+  const [calling, setCalling] = useState(false);
+
+  const handleClick = async () => {
+    if (calling) return;
+    setCalling(true);
+    try {
+      // POST to REST — backend pushes "incoming_call" WS event to receiver
+      const { data } = await api.post("/calls/initiate", {
+        receiver_id: contactId,
+        call_type: callType,
+      });
+      // Caller enters CallScreen immediately; sends webrtc_offer after call_accepted WS event
+      onCallStarted && onCallStarted(data.id, callType, contactUser);
+    } catch (e) {
+      console.error("Call initiation error:", e);
+      alert("Could not start call. Please try again.");
+    } finally {
+      setCalling(false);
     }
-
-    // Generate a unique call ID client-side (UUIDv4-ish)
-    const callId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
-
-    ws.send(JSON.stringify({
-      type: 'call_initiate',
-      call_id: callId,
-      target_user_id: contactId,
-      call_type: callType,
-    }));
-
-    onCallStarted && onCallStarted(callId, callType, contactUser);
   };
 
   return (
     <button
       className="icon-btn"
-      style={{ color: '#aebac1' }}
+      style={{ color: "#aebac1", opacity: calling ? 0.5 : 1 }}
       onClick={handleClick}
-      title={callType === 'video' ? 'Video call' : 'Voice call'}
+      disabled={calling}
+      title={callType === "video" ? "Video call" : "Voice call"}
     >
-      {callType === 'video' ? <Icon.VideoCall /> : <Icon.Phone />}
+      {callType === "video" ? <Icon.VideoCall /> : <Icon.Phone />}
     </button>
   );
 }
