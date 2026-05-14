@@ -26,4 +26,4 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships (jab contact model ban jayega tab connect karne ke liye)
-    contacts = relationship("Contact", foreign_keys="Contact.user_id", back_populates="owner", cascade="all, delete-orphan")
+    contacts = relationship("Contact", foreign_keys="[Contact.user_id]", back_populates="owner", cascade="all, delete-orphan")
