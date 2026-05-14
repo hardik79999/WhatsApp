@@ -235,3 +235,108 @@ def add_member(
     db.add(new_member)
     db.commit()
     return {"message": "Member added successfully"}
+
+
+
+
+
+# ── ADD THESE ROUTES TO THE BOTTOM OF chats.py ──────────────────────────────
+
+from pydantic import BaseModel
+
+class GroupUpdate(BaseModel):
+    group_name: Optional[str] = None
+    group_description: Optional[str] = None
+    group_picture: Optional[str] = None
+
+
+@router.put("/{chat_id}/info", response_model=ChatResponse)
+def update_group_info(
+    chat_id: UUID,
+    payload: GroupUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Admin can update group name, description, photo."""
+    chat = db.query(Chat).filter(Chat.id == chat_id, Chat.is_group == True).first()
+    if not chat:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    admin = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.user_id == current_user.id,
+        ChatParticipant.role == "admin"
+    ).first()
+    if not admin:
+        raise HTTPException(status_code=403, detail="Only admins can edit group info")
+
+    if payload.group_name:
+        chat.group_name = payload.group_name.strip()
+    if payload.group_description is not None:
+        chat.group_description = payload.group_description
+    if payload.group_picture is not None:
+        chat.group_picture = payload.group_picture
+
+    db.commit()
+    db.refresh(chat)
+    return format_chat_response(chat, db, current_user.id)
+
+
+@router.delete("/{chat_id}/participants/{user_id}")
+def remove_member(
+    chat_id: UUID,
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Admin removes a member OR user removes themselves (leave group)."""
+    is_self = str(user_id) == str(current_user.id)
+
+    if not is_self:
+        admin = db.query(ChatParticipant).filter(
+            ChatParticipant.chat_id == chat_id,
+            ChatParticipant.user_id == current_user.id,
+            ChatParticipant.role == "admin"
+        ).first()
+        if not admin:
+            raise HTTPException(status_code=403, detail="Only admins can remove members")
+
+    member = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.user_id == user_id
+    ).first()
+
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found in this group")
+
+    db.delete(member)
+    db.commit()
+    return {"message": "Removed from group"}
+
+
+@router.post("/{chat_id}/participants/{user_id}/promote")
+def promote_to_admin(
+    chat_id: UUID,
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Promote a member to admin (admin only)."""
+    admin = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.user_id == current_user.id,
+        ChatParticipant.role == "admin"
+    ).first()
+    if not admin:
+        raise HTTPException(status_code=403, detail="Admins only")
+
+    member = db.query(ChatParticipant).filter(
+        ChatParticipant.chat_id == chat_id,
+        ChatParticipant.user_id == user_id
+    ).first()
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not found")
+
+    member.role = "admin"
+    db.commit()
+    return {"message": "Promoted to admin"}
