@@ -71,20 +71,32 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
       onMouseUp={stopRecording}
       onTouchStart={startRecording}
       onTouchEnd={stopRecording}
-      className={`p-2 rounded-full transition-colors ${
-        recording
-          ? "bg-red-500 text-white animate-pulse"
-          : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
-      }`}
       title={recording ? `Recording… ${fmt(seconds)}` : "Hold to record voice note"}
+      style={{
+        width: 40,
+        height: 40,
+        borderRadius: "50%",
+        border: "none",
+        cursor: "pointer",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+        background: recording ? "#e74c3c" : "rgba(134,150,160,0.15)",
+        color: recording ? "#fff" : "#8696a0",
+        transition: "background 0.2s, transform 0.1s",
+        animation: recording ? "pulse 1s infinite" : "none",
+      }}
     >
       {recording ? (
-        <span className="text-xs font-mono px-1">{fmt(seconds)}</span>
+        /* Show timer while recording */
+        <span style={{ fontSize: 11, fontFamily: "monospace", fontWeight: 700 }}>
+          {fmt(seconds)}
+        </span>
       ) : (
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none"
-          viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round"
-            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4M12 3a4 4 0 014 4v4a4 4 0 01-8 0V7a4 4 0 014-4z" />
+        /* Mic icon */
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+          <path d="M11.999 14.942c2.001 0 3.531-1.53 3.531-3.531V4.35c0-2.001-1.53-3.531-3.531-3.531S8.469 2.35 8.469 4.35v7.061c0 2.001 1.53 3.531 3.53 3.531zm6.238-3.53c0 3.531-2.942 6.002-6.237 6.002s-6.237-2.471-6.237-6.002H3.761c0 4.001 3.178 7.297 7.061 7.885v3.884h2.354v-3.884c3.884-.588 7.061-3.884 7.061-7.885h-2z"/>
         </svg>
       )}
     </button>

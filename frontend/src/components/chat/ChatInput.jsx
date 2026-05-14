@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import axios from "axios";
 import MediaUploadButton from "./MediaUploadButton";
 import VoiceRecorder from "./VoiceRecorder";
@@ -6,6 +6,7 @@ import VoiceRecorder from "./VoiceRecorder";
 export default function ChatInput({ chatId, currentUserId, onMessageSent }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
+  const inputRef = useRef(null);
 
   const sendMessage = async (payload) => {
     setSending(true);
@@ -28,20 +29,25 @@ export default function ChatInput({ chatId, currentUserId, onMessageSent }) {
     const trimmed = text.trim();
     if (!trimmed || sending) return;
     setText("");
+    inputRef.current?.focus();
     await sendMessage({ content: trimmed, message_type: "text" });
   };
 
-  // Called after user picks a file and it uploads
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      handleTextSend(e);
+    }
+  };
+
   const handleMediaUpload = async (uploadResult) => {
     await sendMessage({
       content: uploadResult.filename,
-      message_type: uploadResult.media_type,  // image | video | audio | document
+      message_type: uploadResult.media_type,
       media_url: uploadResult.media_url,
       file_size: uploadResult.file_size,
     });
   };
 
-  // Called after voice note finishes uploading
   const handleVoiceRecorded = async (uploadResult) => {
     await sendMessage({
       message_type: "audio",
@@ -54,32 +60,77 @@ export default function ChatInput({ chatId, currentUserId, onMessageSent }) {
   return (
     <form
       onSubmit={handleTextSend}
-      className="flex items-center gap-2 px-4 py-3 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "10px 16px",
+        background: "#202c33",
+        borderTop: "1px solid #2a3942",
+        flexShrink: 0,
+        zIndex: 10,
+        position: "relative",
+      }}
     >
+      {/* Attach / media button */}
       <MediaUploadButton onUpload={handleMediaUpload} disabled={sending} />
 
+      {/* Text input */}
       <input
+        ref={inputRef}
         type="text"
         value={text}
         onChange={(e) => setText(e.target.value)}
+        onKeyDown={handleKeyDown}
         placeholder="Type a message"
         disabled={sending}
-        className="flex-1 bg-gray-100 dark:bg-gray-700 rounded-full px-4 py-2 text-sm outline-none
-                   text-gray-900 dark:text-gray-100 placeholder-gray-400
-                   focus:ring-2 focus:ring-green-400 transition-all"
+        style={{
+          flex: 1,
+          background: "#2a3942",
+          border: "none",
+          borderRadius: 8,
+          padding: "10px 16px",
+          color: "#e9edef",
+          fontSize: 15,
+          fontFamily: "inherit",
+          outline: "none",
+          caretColor: "#00a884",
+          lineHeight: 1.5,
+        }}
+        autoComplete="off"
       />
 
+      {/* Send button — shown when there's text */}
       {text.trim() ? (
         <button
           type="submit"
           disabled={sending}
-          className="w-9 h-9 rounded-full bg-green-500 hover:bg-green-600 text-white flex items-center justify-center transition-colors disabled:opacity-50"
+          title="Send"
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: "50%",
+            background: "#00a884",
+            border: "none",
+            cursor: sending ? "not-allowed" : "pointer",
+            color: "#fff",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexShrink: 0,
+            opacity: sending ? 0.6 : 1,
+            transition: "background 0.15s, transform 0.1s",
+          }}
+          onMouseEnter={(e) => { if (!sending) e.currentTarget.style.background = "#00c99f"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = "#00a884"; }}
         >
-          <svg className="w-4 h-4 rotate-90" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          {/* Send icon */}
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M1.101 21.757L23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z" />
           </svg>
         </button>
       ) : (
+        /* Mic / voice recorder — shown when input is empty */
         <VoiceRecorder onRecorded={handleVoiceRecorded} disabled={sending} />
       )}
     </form>

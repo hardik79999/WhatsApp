@@ -23,7 +23,7 @@ function CallScreen({ callId, callType, remoteUser, isCaller, ws, localUserId, o
   const [callStatus,    setCallStatus]    = useState(isCaller ? 'Calling…' : 'Connecting…');
   const timerRef = useRef(null);
 
-  const { startCall, answerCall, handleAnswer, handleIceCandidate, endCall, toggleMute, toggleCamera } = useWebRTC({
+  const { startCall, answerCall, handleAnswer, handleIceCandidate, endCall, cleanup, toggleMute, toggleCamera } = useWebRTC({
     ws,
     localUserId,
     remoteUserId: remoteUser.id,
@@ -55,7 +55,15 @@ function CallScreen({ callId, callType, remoteUser, isCaller, ws, localUserId, o
       answerCall(offerSdp, attachLocal, attachRemote).catch(console.error);
     }
 
-    return () => clearInterval(timerRef.current);
+    // ✔ Guaranteed teardown: runs whenever the component unmounts,
+    // regardless of who ended the call (user click OR remote hang-up).
+    return () => {
+      clearInterval(timerRef.current);
+      cleanup(); // stops camera/mic tracks → turns off camera LED
+      // Also release the video element src so Chrome/Firefox free the device
+      if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Handle incoming WS signalling events ─────────────────────────────
@@ -73,6 +81,9 @@ function CallScreen({ callId, callType, remoteUser, isCaller, ws, localUserId, o
         await handleIceCandidate(data.candidate);
       } else if (data.type === 'call_ended') {
         clearInterval(timerRef.current);
+        cleanup(); // remote hung up → stop our camera too
+        if (localVideoRef.current)  localVideoRef.current.srcObject  = null;
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
         onEnd();
       }
     };

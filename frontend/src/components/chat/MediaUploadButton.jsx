@@ -32,21 +32,20 @@ export default function MediaUploadButton({ onUpload, disabled }) {
         ref={inputRef}
         type="file"
         accept={ACCEPT}
-        className="hidden"
+        style={{ display: "none" }}
         onChange={handleChange}
       />
       <button
         type="button"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
-        className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 transition-colors"
         title="Attach file"
+        className="icon-btn"
+        style={{ color: "#8696a0", flexShrink: 0 }}
       >
-        {/* Paperclip icon */}
-        <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none"
-          viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round"
-            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+        {/* Paperclip / attach icon */}
+        <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+          <path d="M1.816 15.556v.002c0 1.502.584 2.912 1.646 3.972s2.472 1.647 3.974 1.647a5.58 5.58 0 0 0 3.972-1.645l9.547-9.548c.769-.768 1.147-1.767 1.058-2.817-.079-.968-.548-1.927-1.319-2.698-1.594-1.592-4.068-1.711-5.517-.262l-7.916 7.915c-.881.881-.792 2.25.214 3.261.959.958 2.423 1.053 3.263.215l5.511-5.512c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-5.506 5.506c-.18.18-.635.127-.976-.214-.098-.097-.576-.613-.213-.973l7.915-7.917c.818-.817 2.267-.699 3.23.262.5.501.802 1.1.849 1.685.051.573-.156 1.111-.589 1.543l-9.547 9.549a3.97 3.97 0 0 1-2.829 1.171 3.975 3.975 0 0 1-2.83-1.173 3.973 3.973 0 0 1-1.172-2.828c0-1.071.415-2.076 1.172-2.83l7.209-7.211c.157-.157.264-.579.028-.814L11.5 4.36a.572.572 0 0 0-.834.018L3.455 11.59a5.564 5.564 0 0 0-1.639 3.966z"/>
         </svg>
       </button>
     </>

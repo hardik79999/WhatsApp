@@ -16,6 +16,29 @@ export function useWebRTC({ ws, localUserId, remoteUserId, callType, isCaller, c
   const localStream   = useRef(null);
   const remoteStream  = useRef(null);
 
+  // ── Hard stop: ALWAYS kills camera/mic + closes PeerConnection ───────────
+  // Called both from endCall() and from CallScreen's unmount cleanup,
+  // so the browser camera indicator turns off no matter how the call ends.
+  const cleanup = useCallback(() => {
+    // Stop every track — this turns off the camera/mic LED
+    if (localStream.current) {
+      localStream.current.getTracks().forEach(t => {
+        t.stop();
+        localStream.current.removeTrack(t);
+      });
+      localStream.current = null;
+    }
+    // Also clear the remote stream ref
+    if (remoteStream.current) {
+      remoteStream.current = null;
+    }
+    // Close RTCPeerConnection
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+  }, []);
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   const sendWS = useCallback((payload) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -115,13 +138,9 @@ export function useWebRTC({ ws, localUserId, remoteUserId, callType, isCaller, c
 
   // ── End / cleanup ────────────────────────────────────────────────────────
   const endCall = useCallback(() => {
-    localStream.current?.getTracks().forEach(t => t.stop());
-    localStream.current = null;
-    pcRef.current?.close();
-    pcRef.current = null;
-
+    cleanup(); // stop camera + mic + close PC
     sendWS({ type: 'call_end', call_id: callId, target_user_id: remoteUserId });
-  }, [callId, remoteUserId, sendWS]);
+  }, [cleanup, callId, remoteUserId, sendWS]);
 
   const toggleMute = useCallback(() => {
     const audio = localStream.current?.getAudioTracks()[0];
@@ -135,5 +154,5 @@ export function useWebRTC({ ws, localUserId, remoteUserId, callType, isCaller, c
     return !localStream.current?.getVideoTracks()[0]?.enabled;
   }, []);
 
-  return { startCall, answerCall, handleAnswer, handleIceCandidate, endCall, toggleMute, toggleCamera };
+  return { startCall, answerCall, handleAnswer, handleIceCandidate, endCall, cleanup, toggleMute, toggleCamera };
 }
