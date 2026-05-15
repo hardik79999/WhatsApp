@@ -33,3 +33,9 @@ pnpm-debug.log*
 # Runtime uploads (keep code, ignore user data)
 backend/media/
 uploads/
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+dist/
+build/
