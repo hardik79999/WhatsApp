@@ -1,65 +1,94 @@
-# React + Vite
+# Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React/Vite frontend for the WhatsApp Clone project.
 
-Currently, two official plugins are available:
+## Responsibilities
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- OTP login UI
+- Chat list and chat window
+- Direct and group messaging
+- Media upload and preview flows
+- Voice recorder and audio playback
+- Status creation and viewing
+- Reactions, forwarding, profile panels, and contact details
+- WebSocket connection for realtime updates
+- Call UI and WebRTC signaling integration
 
-## React Compiler
+## Local Setup
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+From the repository root:
 
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-
-<!-- API_TESTING_PROGRESS_START -->
-## Latest Progress - API Testing And Usage System
-
-Updated on: May 18, 2026
-
-A complete FastAPI API testing and usage system has been generated for this project.
-
-What is now available:
-- Visual API dashboard: `docs/index.html`
-- Main beginner API guide: `API_GUIDE.md`
-- API usage examples: `API_USAGE_EXAMPLES.md`
-- API flow diagrams: `API_FLOW_DIAGRAM.md`
-- Postman collection: `POSTMAN_COLLECTION.json`
-- Thunder Client collection: `THUNDER_CLIENT_COLLECTION.json`
-- Bruno collection folder: `BRUNO_COLLECTION/`
-- Automated API smoke-test runner: `scripts/test_all_apis.py`
-- Regeneration utility: `scripts/generate_api_artifacts.py`
-
-Current API inventory:
-- 46 HTTP API operations detected
-- 1 WebSocket route detected: `/api/v1/ws`
-- 11 API modules grouped in the dashboard
-- JWT Bearer authentication and cookie/CSRF refresh flow documented
-- Upload, media, chat, message, call, status, reaction, user, contact, group, and auth APIs documented
-
-Start here:
-1. Start backend: `./start_backend.sh`
-2. Serve API dashboard: `python3 -m http.server 4173 --directory docs`
-3. Open dashboard: `http://localhost:4173/index.html`
-4. Send OTP using `/api/v1/auth/send-otp`
-5. Read OTP from backend terminal
-6. Verify OTP using `/api/v1/auth/verify-otp`
-7. Copy `access_token` into the dashboard or collection variables
-8. Test protected APIs with `Authorization: Bearer <access_token>`
-
-Useful test command:
 ```bash
-.venv/bin/python scripts/test_all_apis.py --base-url http://localhost:8000
+cp frontend/.env.example frontend/.env.local
+cd frontend
+npm install
+npm run dev
 ```
 
-Notes:
-- The generated dashboard is a static React/Tailwind page served from `docs/index.html`.
-- Protected HTTP APIs use `Authorization: Bearer <access_token>`.
-- Refresh uses the refresh cookie plus `X-CSRF-Token`.
-- WebSocket auth currently reads the `access_token` cookie.
-- Use `API_GUIDE.md` and `API_USAGE_EXAMPLES.md` when you need exact request and response examples.
-<!-- API_TESTING_PROGRESS_END -->
+Frontend URL:
 
+```text
+http://localhost:5173
+```
+
+## Environment Variables
+
+See [frontend/.env.example](.env.example).
+
+```env
+VITE_API_URL=http://localhost:8000/api/v1
+VITE_WS_URL=ws://localhost:8000/api/v1/ws
+```
+
+Do not commit `.env.local`.
+
+## Available Scripts
+
+```bash
+npm run dev
+npm run build
+npm run lint
+npm run preview
+```
+
+## API Client
+
+The frontend API client lives in:
+
+```text
+frontend/src/api/
+```
+
+Important files:
+
+- `client.js`: shared Axios instance, JWT header injection, token refresh handling
+- `auth.js`: OTP and token helpers
+- `chats.js`: chat and group helpers
+- `messages.js`: message helpers
+- `media.js`: upload/delete helpers
+- `contacts.js`: contact helpers
+- `reactions.js`: reaction helpers
+
+## Realtime
+
+The WebSocket endpoint is:
+
+```text
+ws://localhost:8000/api/v1/ws
+```
+
+The backend currently authenticates WebSockets through the `access_token` cookie.
+
+## Production Build
+
+```bash
+npm run build
+```
+
+Build output:
+
+```text
+frontend/dist/
+```
+
+The `dist/` folder is ignored by git.

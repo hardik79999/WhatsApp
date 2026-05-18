@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: API guide
+    url: https://github.com/hardik79999/WhatsApp/blob/main/API_GUIDE.md
+    about: Read generated API documentation before opening API usage questions.

@@ -1,50 +1,113 @@
+# Backend
 
+FastAPI backend for the WhatsApp Clone project.
 
-<!-- API_TESTING_PROGRESS_START -->
-## Latest Progress - API Testing And Usage System
+## Responsibilities
 
-Updated on: May 18, 2026
+- OTP authentication and JWT token rotation
+- User profile management
+- Contact sync and user search
+- Direct and group chat APIs
+- Message send/edit/delete/star flows
+- Media and voice-note uploads
+- Status updates and view tracking
+- Message reactions
+- Call lifecycle APIs
+- WebSocket events for presence, typing, read receipts, calls, and WebRTC signaling
 
-A complete FastAPI API testing and usage system has been generated for this project.
+## Local Setup
 
-What is now available:
-- Visual API dashboard: `docs/index.html`
-- Main beginner API guide: `API_GUIDE.md`
-- API usage examples: `API_USAGE_EXAMPLES.md`
-- API flow diagrams: `API_FLOW_DIAGRAM.md`
-- Postman collection: `POSTMAN_COLLECTION.json`
-- Thunder Client collection: `THUNDER_CLIENT_COLLECTION.json`
-- Bruno collection folder: `BRUNO_COLLECTION/`
-- Automated API smoke-test runner: `scripts/test_all_apis.py`
-- Regeneration utility: `scripts/generate_api_artifacts.py`
+From the repository root:
 
-Current API inventory:
-- 46 HTTP API operations detected
-- 1 WebSocket route detected: `/api/v1/ws`
-- 11 API modules grouped in the dashboard
-- JWT Bearer authentication and cookie/CSRF refresh flow documented
-- Upload, media, chat, message, call, status, reaction, user, contact, group, and auth APIs documented
+```bash
+cp backend/.env.example backend/.env
+.venv/bin/python -m pip install -r backend/requirements.txt
+./start_backend.sh
+```
 
-Start here:
-1. Start backend: `./start_backend.sh`
-2. Serve API dashboard: `python3 -m http.server 4173 --directory docs`
-3. Open dashboard: `http://localhost:4173/index.html`
-4. Send OTP using `/api/v1/auth/send-otp`
-5. Read OTP from backend terminal
-6. Verify OTP using `/api/v1/auth/verify-otp`
-7. Copy `access_token` into the dashboard or collection variables
-8. Test protected APIs with `Authorization: Bearer <access_token>`
+Backend URL:
 
-Useful test command:
+```text
+http://localhost:8000
+```
+
+Swagger:
+
+```text
+http://localhost:8000/docs
+```
+
+ReDoc:
+
+```text
+http://localhost:8000/redoc
+```
+
+## Environment Variables
+
+See [backend/.env.example](.env.example).
+
+Required:
+
+- `DATABASE_URL`
+- `SECRET_KEY`
+
+Common local values:
+
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/whatsapp_db
+SECRET_KEY=change-me-to-a-long-random-secret-key-at-least-32-chars
+ALGORITHM=HS256
+BASE_URL=http://localhost:8000
+MEDIA_STORAGE_PATH=./media
+```
+
+Do not commit `backend/.env`.
+
+## API Documentation
+
+Generated project-level API docs live at the repository root:
+
+- `API_GUIDE.md`
+- `API_USAGE_EXAMPLES.md`
+- `API_FLOW_DIAGRAM.md`
+- `docs/index.html`
+- `POSTMAN_COLLECTION.json`
+- `THUNDER_CLIENT_COLLECTION.json`
+- `BRUNO_COLLECTION/`
+
+Regenerate after route/schema changes:
+
+```bash
+.venv/bin/python scripts/generate_api_artifacts.py
+```
+
+## Testing
+
+Safe smoke tests:
+
 ```bash
 .venv/bin/python scripts/test_all_apis.py --base-url http://localhost:8000
 ```
 
-Notes:
-- The generated dashboard is a static React/Tailwind page served from `docs/index.html`.
-- Protected HTTP APIs use `Authorization: Bearer <access_token>`.
-- Refresh uses the refresh cookie plus `X-CSRF-Token`.
-- WebSocket auth currently reads the `access_token` cookie.
-- Use `API_GUIDE.md` and `API_USAGE_EXAMPLES.md` when you need exact request and response examples.
-<!-- API_TESTING_PROGRESS_END -->
+Authenticated smoke tests:
 
+```bash
+.venv/bin/python scripts/test_all_apis.py \
+  --base-url http://localhost:8000 \
+  --access-token "$ACCESS_TOKEN"
+```
+
+Existing backend tests:
+
+```bash
+cd backend
+../.venv/bin/python -m pytest app/tests
+```
+
+## Notes
+
+- WebSocket route: `/api/v1/ws`
+- Protected HTTP APIs accept `Authorization: Bearer <access_token>`
+- Refresh token flow uses the refresh cookie plus `X-CSRF-Token`
+- Local media files are ignored except `backend/media/.gitkeep`
