@@ -5,6 +5,7 @@
 import { useState } from "react";
 import { Icon } from "./Icons";
 import api from "../api";
+import { showToast } from "./Toast";
 
 function CallButton({ contactId, contactUser, callType, onCallStarted }) {
   const [calling, setCalling] = useState(false);
@@ -26,8 +27,7 @@ function CallButton({ contactId, contactUser, callType, onCallStarted }) {
         profile_pic: contactUser.profile_pic,
       });
     } catch (e) {
-      console.error("Call initiation error:", e);
-      alert("Could not start call. Please try again.");
+      showToast(e.message || "Could not start call. Please try again.", "error");
     } finally {
       setCalling(false);
     }

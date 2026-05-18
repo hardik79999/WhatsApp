@@ -1,5 +1,7 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../../api";
+import { showToast } from "../Toast";
+import { validateGroupName } from "../../utils/validators";
 
 export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpdated, onLeaveGroup }) {
   const [editingName, setEditingName] = useState(false);
@@ -11,19 +13,18 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
   );
 
   const saveGroupName = async () => {
-    if (!newName.trim()) return;
+    const validation = validateGroupName(newName);
+    if (!validation.valid) {
+      showToast(validation.error, "error");
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await axios.put(
-        `/api/v1/chats/${chat.id}/info`,
-        { group_name: newName.trim() },
-        { withCredentials: true }
-      );
+      const { data } = await api.put(`/chats/${chat.id}/info`, { group_name: validation.value });
       onChatUpdated(data);
       setEditingName(false);
     } catch (err) {
-      console.error("Failed to update group name:", err);
-      alert("Failed to update name");
+      showToast(err.message || "Failed to update name", "error");
     } finally {
       setLoading(false);
     }
@@ -32,21 +33,16 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
   const removeMember = async (userId) => {
     if (!window.confirm("Remove this member?")) return;
     try {
-      await axios.delete(`/api/v1/chats/${chat.id}/participants/${userId}`, {
-        withCredentials: true,
-      });
+      await api.delete(`/chats/${chat.id}/participants/${userId}`);
       onChatUpdated({ ...chat, participants: chat.participants.filter((p) => String(p.user_id) !== String(userId)) });
     } catch (err) {
-      console.error("Failed to remove member:", err);
-      alert("Failed to remove member");
+      showToast(err.message || "Failed to remove member", "error");
     }
   };
 
   const promoteMember = async (userId) => {
     try {
-      await axios.post(`/api/v1/chats/${chat.id}/participants/${userId}/promote`, {}, {
-        withCredentials: true,
-      });
+      await api.post(`/chats/${chat.id}/participants/${userId}/promote`);
       onChatUpdated({
         ...chat,
         participants: chat.participants.map((p) =>
@@ -54,21 +50,17 @@ export default function GroupInfoPanel({ chat, currentUserId, onClose, onChatUpd
         ),
       });
     } catch (err) {
-      console.error("Failed to promote member:", err);
-      alert("Failed to promote member");
+      showToast(err.message || "Failed to promote member", "error");
     }
   };
 
   const leaveGroup = async () => {
     if (!window.confirm("Leave this group?")) return;
     try {
-      await axios.delete(`/api/v1/chats/${chat.id}/participants/${currentUserId}`, {
-        withCredentials: true,
-      });
+      await api.delete(`/chats/${chat.id}/participants/${currentUserId}`);
       onLeaveGroup(chat.id);
     } catch (err) {
-      console.error("Failed to leave group:", err);
-      alert("Failed to leave group");
+      showToast(err.message || "Failed to leave group", "error");
     }
   };
 

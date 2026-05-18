@@ -1,0 +1,22 @@
+meta {
+  name: PATCH /api/v1/messages/{message_id}
+  type: http
+  seq: 4
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/messages/{{message_id}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "content": "Hello from the API dashboard"
+  }
+}

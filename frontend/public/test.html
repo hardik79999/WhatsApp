@@ -180,9 +180,9 @@
 
         // Auto-run tests on page load
         window.addEventListener('load', () => {
+            const frontendUrl = window.location.origin;
             console.log('Diagnostic page loaded');
-            console.log('Frontend URL: http://localhost:5173');
-            console.log('Backend URL: http://localhost:8000');
+            console.log('Frontend URL:', frontendUrl);
             console.log('Browser:', navigator.userAgent);
         });
     </script>

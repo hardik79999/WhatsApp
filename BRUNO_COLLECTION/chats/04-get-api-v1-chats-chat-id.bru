@@ -1,0 +1,15 @@
+meta {
+  name: GET /api/v1/chats/{chat_id}
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/chats/{{chat_id}}
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

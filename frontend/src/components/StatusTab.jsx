@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../api";
 import StatusViewer  from "./StatusViewer";
 import StatusCreator from "./StatusCreator";
+import { showToast } from "./Toast";
 
 export default function StatusTab({ currentUser }) {
   const [myStatuses,    setMyStatuses]    = useState([]);
@@ -28,7 +29,7 @@ export default function StatusTab({ currentUser }) {
       setMyStatuses(myRes.data);
       setContactGroups(groupsRes.data);
     } catch (err) {
-      console.error("Status fetch error", err);
+      showToast(err.message || "Status load nahi ho paaye", "error");
     } finally {
       setLoading(false);
     }

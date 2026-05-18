@@ -1,0 +1,21 @@
+meta {
+  name: POST /api/v1/auth/send-otp
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/auth/send-otp
+  body: json
+  auth: none
+}
+
+headers {
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "phone": "+919876543210"
+  }
+}

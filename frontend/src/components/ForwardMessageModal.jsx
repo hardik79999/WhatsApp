@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
+import { showToast } from './Toast';
 
 function ForwardMessageModal({ isOpen, message, chats, currentUser, onClose, onForward }) {
   const [selectedChats, setSelectedChats] = useState([]);
@@ -32,8 +33,7 @@ function ForwardMessageModal({ isOpen, message, chats, currentUser, onClose, onF
       await onForward(message, selectedChats);
       handleClose();
     } catch (error) {
-      console.error('Failed to forward message:', error);
-      alert('Failed to forward message');
+      showToast(error.message || 'Failed to forward message', 'error');
     } finally {
       setForwarding(false);
     }

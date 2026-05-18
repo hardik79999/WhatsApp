@@ -1,6 +1,6 @@
 import { useRef } from "react";
 
-const ACCEPT = "image/*,video/mp4,video/webm,audio/*,application/pdf,.doc,.docx";
+const ACCEPT = "image/jpeg,image/png,image/gif,image/webp,video/mp4,audio/mpeg,audio/ogg,application/pdf";
 
 export default function MediaUploadButton({ onSelectFile, disabled }) {
   const inputRef = useRef(null);

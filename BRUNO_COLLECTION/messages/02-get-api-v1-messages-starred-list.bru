@@ -1,0 +1,15 @@
+meta {
+  name: GET /api/v1/messages/starred/list
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/messages/starred/list
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

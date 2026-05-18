@@ -2,6 +2,8 @@ import { useState } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
 import api from '../api';
+import { showToast } from './Toast';
+import { validateGroupName } from '../utils/validators';
 
 function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -12,18 +14,23 @@ function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
   const isAdmin = chat?.participants?.find(p => p.user_id === currentUser?.id)?.role === 'admin';
 
   const handleSave = async () => {
+    const validation = validateGroupName(groupName);
+    if (!validation.valid) {
+      showToast(validation.error, 'error');
+      return;
+    }
     setSaving(true);
     try {
       // Correct endpoint: PUT /chats/{id}/info
       await api.put(`/chats/${chat.id}/info`, {
-        group_name: groupName.trim(),
+        group_name: validation.value,
         group_description: groupDescription.trim()
       });
       
       setIsEditing(false);
       onUpdate && onUpdate();
     } catch (error) {
-      alert(error.response?.data?.detail || 'Failed to update group');
+      showToast(error.message || 'Failed to update group', 'error');
     } finally {
       setSaving(false);
     }
@@ -38,7 +45,7 @@ function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
       onClose();
       onUpdate && onUpdate();
     } catch (error) {
-      alert(error.response?.data?.detail || 'Failed to leave group');
+      showToast(error.message || 'Failed to leave group', 'error');
     }
   };
 
@@ -49,7 +56,7 @@ function GroupInfoPanel({ chat, currentUser, isOpen, onClose, onUpdate }) {
       await api.delete(`/chats/${chat.id}/participants/${userId}`);
       onUpdate && onUpdate();
     } catch (error) {
-      alert(error.response?.data?.detail || 'Failed to remove participant');
+      showToast(error.message || 'Failed to remove participant', 'error');
     }
   };
 

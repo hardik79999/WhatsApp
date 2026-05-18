@@ -63,10 +63,13 @@ async def websocket_endpoint(websocket: WebSocket):
             data = json.loads(data_str)
             event_type = data.get("type")
 
+            if event_type == "ping":
+                await websocket.send_json({"type": "pong"})
+
             # ════════════════════════════════════════════════
             # TYPING INDICATOR
             # ════════════════════════════════════════════════
-            if event_type == "typing":
+            elif event_type == "typing":
                 chat_id = data.get("chat_id")
                 is_typing = bool(data.get("is_typing", False))
                 if not chat_id:

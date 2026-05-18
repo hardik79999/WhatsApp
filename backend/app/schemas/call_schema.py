@@ -1,12 +1,12 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Literal, Optional
 from datetime import datetime
 from uuid import UUID
  
  
 class CallInitiate(BaseModel):
     receiver_id: UUID
-    call_type: str          # "audio" | "video"
+    call_type: Literal["audio", "video"]
  
  
 class CallResponse(BaseModel):

@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
-import api from '../api';
+import { uploadMedia } from '../api/media';
+import { showToast } from './Toast';
+import { validateFileUpload, validateGroupName } from '../utils/validators';
 
 function CreateGroupPanel({ 
   isOpen, 
@@ -57,6 +59,16 @@ function CreateGroupPanel({
   };
 
   const handleAvatarSelect = (file) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Group avatar image file hona chahiye');
+      return;
+    }
+    const validation = validateFileUpload(file);
+    if (!validation.valid) {
+      setError(validation.error);
+      return;
+    }
+    setError('');
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
     setAvatarUploadId(null);
@@ -66,15 +78,11 @@ function CreateGroupPanel({
     if (!avatarFile) return null;
     setAvatarUploading(true);
     try {
-      const formData = new FormData();
-      formData.append('file', avatarFile);
-      const res = await api.post('/media/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setAvatarUploadId(res.data.id);
-      return res.data.id;
+      const data = await uploadMedia(avatarFile);
+      setAvatarUploadId(data.id);
+      return data.id;
     } catch (err) {
-      console.error('Avatar upload failed', err);
+      showToast(err.message || 'Avatar upload failed', 'error');
       throw err;
     } finally {
       setAvatarUploading(false);
@@ -82,8 +90,9 @@ function CreateGroupPanel({
   };
 
   const handleCreate = async () => {
-    if (!groupName.trim()) {
-      setError('Group name is required');
+    const validation = validateGroupName(groupName);
+    if (!validation.valid) {
+      setError(validation.error);
       return;
     }
 
@@ -95,7 +104,7 @@ function CreateGroupPanel({
       // Support both prop names: onCreate (App.jsx) and onCreateGroup (legacy)
       const handler = onCreate || onCreateGroup;
       await handler({
-        group_name: groupName.trim(),
+        group_name: validation.value,
         group_description: groupDescription.trim() || null,
         group_pic_id: picId,
         participant_ids: selectedContacts

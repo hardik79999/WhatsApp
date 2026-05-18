@@ -10,10 +10,11 @@
 //   ws          – live WebSocket instance from App.jsx
 //   onEnd       – () => void
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useWebRTC } from "../hooks/useWebRTC";
 import Avatar from "./Avatar";
 import api from "../api";
+import { showToast } from "./Toast";
 
 export default function CallScreen({
   callId, callType, remoteUser, isCaller, ws, onEnd,
@@ -42,6 +43,10 @@ export default function CallScreen({
     callType,
     ws,
   });
+
+  const handleSignalError = useCallback((error) => {
+    showToast(error?.message || "Call connection issue", "error");
+  }, []);
 
   // ── Attach streams to video elements ─────────────────────
   useEffect(() => {
@@ -90,25 +95,25 @@ export default function CallScreen({
         case "call_accepted":
           // Caller now sends the WebRTC offer
           if (isCaller) {
-            startAsCallerAfterAccept().catch(console.error);
+            startAsCallerAfterAccept().catch(handleSignalError);
           }
           break;
 
         case "webrtc_offer":
           // Receiver gets the offer (in case offerSdp wasn't passed as prop)
           if (!isCaller) {
-            handleOffer(data.sdp).catch(console.error);
+            handleOffer(data.sdp).catch(handleSignalError);
           }
           break;
 
         case "webrtc_answer":
           if (isCaller) {
-            handleAnswer(data.sdp).catch(console.error);
+            handleAnswer(data.sdp).catch(handleSignalError);
           }
           break;
 
         case "webrtc_ice_candidate":
-          handleIceCandidate(data.candidate).catch(console.error);
+          handleIceCandidate(data.candidate).catch(handleSignalError);
           break;
 
         case "call_ended":
@@ -134,6 +139,7 @@ export default function CallScreen({
     handleOffer,
     handleAnswer,
     handleIceCandidate,
+    handleSignalError,
     hangUp,
     onEnd,
   ]);
@@ -143,7 +149,7 @@ export default function CallScreen({
     try {
       await api.post(`/calls/${callId}/end`);
     } catch (e) {
-      console.error("End call API error:", e);
+      showToast(e.message || "Call end nahi ho paaya", "warning");
     }
     clearInterval(timerRef.current);
     timerRef.current = null;

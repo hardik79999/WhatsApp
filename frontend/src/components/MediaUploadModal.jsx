@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icons';
+import { showToast } from './Toast';
+import { validateFileUpload } from '../utils/validators';
 
-function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', initialFile = null }) {
+function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', initialFile = null, uploadProgress = null }) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [isDragActive, setIsDragActive] = useState(false);
+  const [error, setError] = useState('');
   const fileInputRef = useRef(null);
 
   const clearPreview = () => {
@@ -21,9 +24,18 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', i
 
   const setFile = (file) => {
     clearPreview();
+    setError('');
     setSelectedFile(file);
     if (!file) {
       setPreview(null);
+      return;
+    }
+    const validation = validateFileUpload(file);
+    if (!validation.valid) {
+      setSelectedFile(null);
+      setPreview(null);
+      setError(validation.error);
+      showToast(validation.error, 'error');
       return;
     }
     if (type === 'document') {
@@ -68,16 +80,23 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', i
 
   const handleSend = async () => {
     if (!selectedFile) return;
+    const validation = validateFileUpload(selectedFile);
+    if (!validation.valid) {
+      setError(validation.error);
+      return;
+    }
 
     setUploading(true);
+    setError('');
     try {
       // Support both `onSend` (internal) and `onUpload` (App.jsx legacy)
       const handler = onSend || onUpload;
       await handler(selectedFile, caption);
       handleClose();
     } catch (error) {
-      console.error('Failed to send media:', error);
-      alert('Failed to send media');
+      const message = error.message || 'Failed to send media';
+      setError(message);
+      showToast(message, 'error');
     } finally {
       setUploading(false);
     }
@@ -88,6 +107,7 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', i
     setSelectedFile(null);
     setPreview(null);
     setCaption('');
+    setError('');
     onClose();
   };
 
@@ -176,6 +196,11 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', i
               <Icon.Camera />
               Select {type === 'image' ? 'Photo' : type === 'video' ? 'Video' : 'File'}
             </button>
+            {error && (
+              <div style={{ color: '#ff6b6b', fontSize: 13, marginTop: 12 }}>
+                {error}
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ maxWidth: '90%', maxHeight: '100%', position: 'relative' }}>
@@ -238,6 +263,37 @@ function MediaUploadModal({ isOpen, onClose, onSend, onUpload, type = 'image', i
           alignItems: 'center',
           gap: 12
         }}>
+          {error && (
+            <div style={{
+              position: 'absolute',
+              left: 24,
+              right: 24,
+              top: -28,
+              color: '#ff6b6b',
+              fontSize: 13,
+            }}>
+              {error}
+            </div>
+          )}
+          {uploading && uploadProgress !== null && (
+            <div style={{
+              position: 'absolute',
+              left: 24,
+              right: 24,
+              top: -10,
+              height: 4,
+              background: '#2a3942',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                width: `${uploadProgress}%`,
+                height: '100%',
+                background: '#00a884',
+                transition: 'width .15s ease',
+              }} />
+            </div>
+          )}
           <input
             type="text"
             placeholder="Add a caption..."

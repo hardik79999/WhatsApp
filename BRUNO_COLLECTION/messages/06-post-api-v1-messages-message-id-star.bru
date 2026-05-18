@@ -1,0 +1,15 @@
+meta {
+  name: POST /api/v1/messages/{message_id}/star
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v1/messages/{{message_id}}/star
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

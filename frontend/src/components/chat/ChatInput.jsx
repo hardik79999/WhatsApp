@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import api from '../../api';
+import { sendMessage as sendMessageApi } from '../../api/messages';
+import { uploadMedia } from '../../api/media';
+import { showToast } from '../Toast';
+import { validateFileUpload, validateMessage } from '../../utils/validators';
 import MediaUploadButton from './MediaUploadButton';
 import VoiceRecorder from './VoiceRecorder';
 import MediaUploadModal from '../MediaUploadModal';
@@ -77,6 +80,8 @@ function ReplyPreviewBanner({ replyTo, onCancel }) {
 export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelReply, ws }) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [inputError, setInputError] = useState('');
+  const [uploadProgress, setUploadProgress] = useState(null);
   const inputRef = useRef(null);
   const typingRef = useRef({ isTyping: false, timeoutId: null });
 
@@ -107,6 +112,7 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
   const handleTextChange = (e) => {
     const next = e.target.value;
     setText(next);
+    setInputError('');
     if (!next.trim()) { stopTyping(); return; }
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     if (!typingRef.current.isTyping) { typingRef.current.isTyping = true; sendTyping(true); }
@@ -127,6 +133,12 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
 
   const handleSelectFile = (file) => {
     if (!file) return;
+    const validation = validateFileUpload(file);
+    if (!validation.valid) {
+      setInputError(validation.error);
+      showToast(validation.error, 'error');
+      return;
+    }
     stopTyping();
     setMediaFile(file);
     setMediaType(inferMediaType(file));
@@ -136,15 +148,17 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
   const sendMessage = async (payload) => {
     setSending(true);
     try {
-      const { data } = await api.post('/messages/', {
+      const data = await sendMessageApi({
         chat_id: chatId,
         ...payload,
         ...(replyTo ? { reply_to_message_id: replyTo.id } : {}),
-      }, { withCredentials: true });
+      });
       if (onMessageSent) onMessageSent(data);
       if (onCancelReply) onCancelReply();
     } catch (err) {
-      console.error('Send failed:', err);
+      const message = err.message || 'Message send nahi ho paaya';
+      setInputError(message);
+      showToast(message, 'error');
     } finally {
       setSending(false);
     }
@@ -152,8 +166,13 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
 
   const handleTextSend = async (e) => {
     e.preventDefault();
-    const trimmed = text.trim();
-    if (!trimmed || sending) return;
+    const validation = validateMessage(text);
+    if (!validation.valid) {
+      setInputError(validation.error);
+      return;
+    }
+    const trimmed = validation.value;
+    if (sending) return;
     stopTyping();
     setText('');
     inputRef.current?.focus();
@@ -167,23 +186,28 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
 
   const handleMediaSend = async (file, caption) => {
     if (!file) return;
+    const validation = validateFileUpload(file);
+    if (!validation.valid) {
+      setInputError(validation.error);
+      throw new Error(validation.error);
+    }
     stopTyping();
-    const formData = new FormData();
-    formData.append('file', file);
-    const { data: upload } = await api.post('/media/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      withCredentials: true,
-    });
-    const trimmedCaption = (caption || '').trim();
-    const msgType = upload.file_type || (mediaType === 'image' ? 'image' : mediaType === 'video' ? 'video' : 'document');
-    await sendMessage({
-      content: trimmedCaption || file.name,
-      caption: trimmedCaption || null,
-      message_type: msgType,
-      media_url: upload.media_url,
-      media_id: upload.id || null,
-      file_size: upload.file_size,
-    });
+    setUploadProgress(0);
+    try {
+      const upload = await uploadMedia(file, setUploadProgress);
+      const trimmedCaption = (caption || '').trim();
+      const msgType = upload.file_type || (mediaType === 'image' ? 'image' : mediaType === 'video' ? 'video' : 'document');
+      await sendMessage({
+        content: trimmedCaption || file.name,
+        caption: trimmedCaption || null,
+        message_type: msgType,
+        media_url: upload.media_url,
+        media_id: upload.id || null,
+        file_size: upload.file_size,
+      });
+    } finally {
+      setUploadProgress(null);
+    }
   };
 
   const handleVoiceRecorded = async (uploadResult) => {
@@ -288,7 +312,18 @@ export default function ChatInput({ chatId, onMessageSent, replyTo, onCancelRepl
         onSend={handleMediaSend}
         type={mediaType}
         initialFile={mediaFile}
+        uploadProgress={uploadProgress}
       />
+      {inputError && (
+        <div style={{
+          background: '#202c33',
+          color: '#f15c6d',
+          fontSize: 12,
+          padding: '0 70px 8px',
+        }}>
+          {inputError}
+        </div>
+      )}
     </div>
   );
 }

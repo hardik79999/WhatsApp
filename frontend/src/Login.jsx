@@ -1,5 +1,7 @@
 import { useState, useRef } from 'react';
-import api from './api';
+import { sendOtp, verifyOtp } from './api/auth';
+import { validateOtp, validatePhone } from './utils/validators';
+import { showToast } from './components/Toast';
 
 /* ── Spinner ── */
 const Spinner = () => (
@@ -21,27 +23,27 @@ const WALogo = ({ size = 64 }) => (
 
 /* ── OTP digit boxes ── */
 function OtpInput({ value, onChange }) {
-  const refs = [useRef(), useRef(), useRef(), useRef()];
+  const refs = useRef([]);
   const digits = value.split('');
 
   const handleKey = (i, e) => {
     if (e.key === 'Backspace') {
       const next = value.slice(0, i) + value.slice(i + 1);
       onChange(next);
-      if (i > 0) refs[i - 1].current?.focus();
+      if (i > 0) refs.current[i - 1]?.focus();
     } else if (/^\d$/.test(e.key)) {
-      const next = (value.slice(0, i) + e.key + value.slice(i + 1)).slice(0, 4);
+      const next = (value.slice(0, i) + e.key + value.slice(i + 1)).slice(0, 6);
       onChange(next);
-      if (i < 3) refs[i + 1].current?.focus();
+      if (i < 5) refs.current[i + 1]?.focus();
     }
   };
 
   return (
     <div style={{ display:'flex', gap:12, justifyContent:'center', margin:'24px 0' }}>
-      {[0,1,2,3].map((i) => (
+      {[0,1,2,3,4,5].map((i) => (
         <input
           key={i}
-          ref={refs[i]}
+          ref={(el) => { refs.current[i] = el; }}
           className="otp-box"
           type="text"
           inputMode="numeric"
@@ -68,14 +70,17 @@ export default function Login({ onLoginSuccess }) {
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setError(''); setInfo('');
-    if (!phone.trim()) { setError('Please enter your phone number.'); return; }
+    const phoneValidation = validatePhone(phone);
+    if (!phoneValidation.valid) { setError(phoneValidation.error); return; }
     setLoading(true);
     try {
-      await api.post('/auth/send-otp', { phone: phone.trim() });
+      await sendOtp(phone);
+      setPhone(phoneValidation.value);
       setInfo('OTP sent! Check the backend terminal for your code.');
       setStep('otp');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to send OTP. Is the backend running?');
+      setError(err.message || 'Failed to send OTP. Is the backend running?');
+      showToast(err.message || 'Failed to send OTP', 'error');
     } finally {
       setLoading(false);
     }
@@ -84,15 +89,17 @@ export default function Login({ onLoginSuccess }) {
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setError('');
-    if (otp.length < 4) { setError('Please enter the 4-digit OTP.'); return; }
+    const phoneValidation = validatePhone(phone);
+    if (!phoneValidation.valid) { setError(phoneValidation.error); return; }
+    const otpValidation = validateOtp(otp);
+    if (!otpValidation.valid) { setError(otpValidation.error); return; }
     setLoading(true);
     try {
-      const { data } = await api.post('/auth/verify-otp', { phone: phone.trim(), otp: otp.trim() });
-      if (data.csrf_access_token)  localStorage.setItem('csrf_access_token',  data.csrf_access_token);
-      if (data.csrf_refresh_token) localStorage.setItem('csrf_refresh_token', data.csrf_refresh_token);
+      await verifyOtp(phone, otp);
       onLoginSuccess();
     } catch (err) {
-      setError(err.response?.data?.detail || 'Incorrect OTP. Please try again.');
+      setError(err.message || 'Incorrect OTP. Please try again.');
+      showToast(err.message || 'Incorrect OTP', 'error');
     } finally {
       setLoading(false);
     }
@@ -251,7 +258,7 @@ export default function Login({ onLoginSuccess }) {
                   </label>
                   <OtpInput value={otp} onChange={setOtp} />
 
-                  <button type="submit" disabled={loading || otp.length < 4} style={btnStyle(loading || otp.length < 4)}>
+                  <button type="submit" disabled={loading || otp.length < 6} style={btnStyle(loading || otp.length < 6)}>
                     {loading ? <><Spinner />Verifying…</> : 'Verify & Login ✓'}
                   </button>
 

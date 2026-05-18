@@ -11,7 +11,7 @@ from app.models.user_model import User
 from app.models.chat_model import Chat, ChatParticipant
 from app.models.group_model import GroupMember
 from app.models.message_model import Message, MessageDeletion
-from app.schemas.chat_schema import ChatCreate, ChatResponse, ChatParticipantResponse, GroupChatCreate
+from app.schemas.chat_schema import ChatCreate, ChatResponse, ChatParticipantResponse, GroupChatCreate, GroupUpdate
 
 router = APIRouter()
 
@@ -267,16 +267,6 @@ def add_member(
 
 
 
-
-
-# ── ADD THESE ROUTES TO THE BOTTOM OF chats.py ──────────────────────────────
-
-from pydantic import BaseModel
-
-class GroupUpdate(BaseModel):
-    group_name: Optional[str] = None
-    group_description: Optional[str] = None
-    group_picture: Optional[str] = None
 
 
 @router.put("/{chat_id}/info", response_model=ChatResponse)

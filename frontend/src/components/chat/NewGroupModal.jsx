@@ -1,5 +1,7 @@
 import { useState } from "react";
-import axios from "axios";
+import api from "../../api";
+import { showToast } from "../Toast";
+import { validateGroupName } from "../../utils/validators";
 
 export default function NewGroupModal({ contacts, onClose, onGroupCreated }) {
   const [step, setStep] = useState(1);            // 1 = pick members, 2 = set name
@@ -16,22 +18,24 @@ export default function NewGroupModal({ contacts, onClose, onGroupCreated }) {
   };
 
   const createGroup = async () => {
-    if (!groupName.trim() || selected.length < 1) return;
+    const validation = validateGroupName(groupName);
+    if (!validation.valid || selected.length < 1) {
+      if (!validation.valid) showToast(validation.error, "error");
+      return;
+    }
     setLoading(true);
     try {
-      const { data } = await axios.post(
-        "/api/v1/chats/group",
+      const { data } = await api.post(
+        "/chats/group",
         {
-          group_name: groupName.trim(),
+          group_name: validation.value,
           participant_ids: selected.map((c) => c.contact_id),
-        },
-        { withCredentials: true }
+        }
       );
       onGroupCreated(data);
       onClose();
     } catch (err) {
-      console.error("Group creation failed:", err);
-      alert(err.response?.data?.detail || "Failed to create group");
+      showToast(err.message || "Failed to create group", "error");
     } finally {
       setLoading(false);
     }

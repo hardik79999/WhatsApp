@@ -25,6 +25,7 @@
 import { useEffect, useState } from "react";
 import api from "../api";    // ← correct import for this project
 import Avatar from "./Avatar";
+import { showToast } from "./Toast";
 
 export default function IncomingCallAlert({ call, onAccept, onReject }) {
   const [ringing, setRinging] = useState(true);
@@ -49,7 +50,7 @@ export default function IncomingCallAlert({ call, onAccept, onReject }) {
         profile_pic: call.caller_pic,
       });
     } catch (e) {
-      console.error("Accept call error:", e);
+      showToast(e.message || "Call accept nahi ho paaya", "error");
     }
   };
 
@@ -57,7 +58,7 @@ export default function IncomingCallAlert({ call, onAccept, onReject }) {
     try {
       await api.post(`/calls/${call.call_id}/reject`);
     } catch (e) {
-      console.error("Reject call error:", e);
+      showToast(e.message || "Call reject nahi ho paaya", "warning");
     } finally {
       onReject();
     }

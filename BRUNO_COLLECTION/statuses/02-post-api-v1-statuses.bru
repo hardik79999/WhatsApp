@@ -1,0 +1,25 @@
+meta {
+  name: POST /api/v1/statuses/
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/statuses/
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "content": "Hello from the API dashboard",
+    "media_url": "http://localhost:8000/media/images/sample.jpg",
+    "thumbnail_url": "http://localhost:8000/media/images/sample.jpg",
+    "background_color": "#1a1a2e"
+  }
+}

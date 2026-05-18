@@ -1,6 +1,8 @@
 from fastapi import Depends, HTTPException, status, Cookie, Header
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
+from uuid import UUID
+
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user_model import User
@@ -12,34 +14,49 @@ def get_current_user(
     access_token: str = Cookie(None), 
     # FastAPI automatically 'X-CSRF-Token' header padh lega
     x_csrf_token: str = Header(None, alias="X-CSRF-Token"),
+    authorization: str = Header(None, alias="Authorization"),
     db: Session = Depends(get_db)
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials or missing CSRF token",
     )
-    
-    # Agar cookie ya CSRF header missing hai toh reject karo
-    if not access_token or not x_csrf_token:
+
+    bearer_token = None
+    if authorization and authorization.lower().startswith("bearer "):
+        bearer_token = authorization.split(" ", 1)[1].strip()
+
+    token = bearer_token or access_token
+
+    if not token:
         raise credentials_exception
 
     try:
-        payload = jwt.decode(access_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         
         if payload.get("type") != "access":
             raise credentials_exception
-            
-        # Double Submit Check: Jo CSRF header mein aaya hai, wahi JWT ke andar hona chahiye
-        if payload.get("csrf") != x_csrf_token:
-             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
+
+        # Cookie auth keeps the double-submit CSRF check. Bearer auth is already
+        # tied to the Authorization header and is used by the React API client.
+        if not bearer_token:
+            if not x_csrf_token:
+                raise credentials_exception
+            if payload.get("csrf") != x_csrf_token:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
             
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    user = db.query(User).filter(User.id == user_id).first()
+
+    try:
+        user_uuid = UUID(str(user_id))
+    except Exception:
+        raise credentials_exception
+
+    user = db.query(User).filter(User.id == user_uuid).first()
     if user is None:
         raise credentials_exception
         

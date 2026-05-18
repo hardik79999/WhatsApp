@@ -1,0 +1,31 @@
+meta {
+  name: POST /api/v1/messages/
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/messages/
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "chat_id": "11111111-1111-1111-1111-111111111111",
+    "content": "Hello from the API dashboard",
+    "message_type": "text",
+    "media_url": "http://localhost:8000/media/images/sample.jpg",
+    "thumbnail_url": "http://localhost:8000/media/images/sample.jpg",
+    "file_size": 1024,
+    "duration": 30,
+    "media_id": "11111111-1111-1111-1111-111111111111",
+    "caption": "sample_caption",
+    "reply_to_message_id": "11111111-1111-1111-1111-111111111111"
+  }
+}

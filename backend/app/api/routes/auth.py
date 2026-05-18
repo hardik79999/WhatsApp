@@ -1,9 +1,17 @@
 import random
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Header, Request
 from jose import jwt, JWTError
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.core.security import create_access_token, create_refresh_token
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    is_refresh_token_used,
+    mark_refresh_token_used,
+)
+from app.core.rate_limit import limiter
 from app.schemas.auth_schema import SendOTPRequest, VerifyOTPRequest, TokenResponse
 from app.models.user_model import User
 from app.core.config import settings
@@ -13,24 +21,26 @@ router = APIRouter()
 otp_storage = {}
 
 @router.post("/send-otp", status_code=status.HTTP_200_OK)
-def send_otp(request: SendOTPRequest):
-    mock_otp = str(random.randint(1000, 9999))
-    otp_storage[request.phone] = mock_otp
-    print(f"\n{'='*40}\n🚀 MOCK OTP FOR {request.phone} : {mock_otp}\n{'='*40}\n")
+@limiter.limit("5/minute")
+def send_otp(request: Request, body: SendOTPRequest):
+    mock_otp = f"{random.randint(0, 999999):06d}"
+    otp_storage[body.phone] = mock_otp
+    print(f"\n{'='*40}\nMOCK OTP FOR {body.phone} : {mock_otp}\n{'='*40}\n")
     return {"message": "OTP sent successfully"}
 
 # Yahan Response object add kiya hai
 @router.post("/verify-otp", response_model=TokenResponse)
-def verify_otp(request: VerifyOTPRequest, response: Response, db: Session = Depends(get_db)):
-    stored_otp = otp_storage.get(request.phone)
-    if not stored_otp or stored_otp != request.otp:
+@limiter.limit("10/minute")
+def verify_otp(request: Request, body: VerifyOTPRequest, response: Response, db: Session = Depends(get_db)):
+    stored_otp = otp_storage.get(body.phone)
+    if not stored_otp or stored_otp != body.otp:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid OTP")
     
-    user = db.query(User).filter(User.phone == request.phone).first()
+    user = db.query(User).filter(User.phone == body.phone).first()
     is_new_user = False
     
     if not user:
-        user = User(phone=request.phone)
+        user = User(phone=body.phone)
         db.add(user)
         db.commit()
         db.refresh(user)
@@ -50,10 +60,12 @@ def verify_otp(request: VerifyOTPRequest, response: Response, db: Session = Depe
         httponly=True, secure=False, samesite="lax", path="/"
     )
     
-    del otp_storage[request.phone]
+    del otp_storage[body.phone]
     
     # Return mein sirf CSRF tokens
     return {
+        "access_token": access_token,
+        "token_type": "bearer",
         "csrf_access_token": csrf_access,
         "csrf_refresh_token": csrf_refresh,
         "is_new_user": is_new_user
@@ -79,6 +91,11 @@ def refresh_tokens(
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
         if payload.get("csrf") != x_csrf_token:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="CSRF token mismatch")
+        token_jti = payload.get("jti")
+        if not token_jti:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        if is_refresh_token_used(token_jti):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token already used")
         user_id: str = payload.get("sub")
         if not user_id:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
@@ -94,6 +111,7 @@ def refresh_tokens(
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
+    mark_refresh_token_used(token_jti)
     access_token, csrf_access = create_access_token(data={"sub": str(user.id)})
     new_refresh_token, csrf_refresh = create_refresh_token(data={"sub": str(user.id)})
 
@@ -115,6 +133,8 @@ def refresh_tokens(
     )
 
     return {
+        "access_token": access_token,
+        "token_type": "bearer",
         "csrf_access_token": csrf_access,
         "csrf_refresh_token": csrf_refresh,
         "is_new_user": False,
@@ -126,4 +146,3 @@ def logout(response: Response):
     response.delete_cookie(key="access_token", path="/")
     response.delete_cookie(key="refresh_token", path="/")
     return {"message": "Logged out"}
-from uuid import UUID

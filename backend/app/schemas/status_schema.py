@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator, model_validator
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -9,6 +9,19 @@ class StatusCreate(BaseModel):
     media_url: Optional[str] = None     # From /api/v1/media/upload
     thumbnail_url: Optional[str] = None
     background_color: Optional[str] = "#1a1a2e"  # For text-only statuses
+
+    @field_validator("content")
+    @classmethod
+    def validate_content(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @model_validator(mode="after")
+    def validate_content_or_media(self):
+        if not self.content and not self.media_url:
+            raise ValueError("Status content ya media required hai")
+        return self
 
 
 class StatusViewerResponse(BaseModel):

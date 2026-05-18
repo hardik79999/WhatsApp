@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import Login from './Login';
 import api from './api';
+import { createChat, createGroup, getChats } from './api/chats';
+import { getContacts as getContactsApi } from './api/contacts';
+import { deleteMessage, getMessages, sendMessage as sendMessageApi } from './api/messages';
+import { addReaction } from './api/reactions';
 import Avatar from './components/Avatar';
 import ChatList from './components/ChatList';
 import ChatWindow from './components/ChatWindow';
@@ -15,9 +19,10 @@ import ProfilePanel from './components/ProfilePanel';
 import StatusTab from './components/StatusTab';
 import IncomingCallAlert from './components/IncomingCallAlert';
 import CallScreen from './components/CallScreen';
+import { showToast } from './components/Toast';
 
 function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('csrf_access_token')));
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(localStorage.getItem('access_token') || localStorage.getItem('csrf_access_token')));
   const [currentUser, setCurrentUser]         = useState(null);
   const [chats, setChats]                     = useState([]);
   const [loading, setLoading]                 = useState(() => Boolean(localStorage.getItem('csrf_access_token')));
@@ -31,6 +36,9 @@ function App() {
   const [contacts, setContacts]               = useState([]);
   const [selectedChat, setSelectedChat]       = useState(null);
   const [messages, setMessages]               = useState([]);
+  const [messagePage, setMessagePage]         = useState(1);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [searchQuery, setSearchQuery]         = useState('');
   const [activeTab, setActiveTab]             = useState(() => sessionStorage.getItem('activeTab') || 'chats'); // 'chats' | 'status' | 'calls'
   const [reactionPicker, setReactionPicker]   = useState(null);   // { x, y, messageId }
@@ -38,10 +46,12 @@ function App() {
   const [incomingCall, setIncomingCall]       = useState(null);   // incoming_call WS payload
   const [activeCall, setActiveCall]           = useState(null);   // { callId, callType, remoteUser, isCaller, offerSdp? }
   const [isProfileOpen, setIsProfileOpen]     = useState(false);  // Profile panel
+  const [connectionBanner, setConnectionBanner] = useState(null);
 
   const wsRef           = useRef(null);
   const selectedChatRef = useRef(null);
   const currentUserRef  = useRef(null);
+  const manualLogoutRef = useRef(false);
 
   useEffect(() => {
     if (isAuthenticated) fetchInitialData();
@@ -59,20 +69,77 @@ function App() {
     if (!isAuthenticated) return;
 
     let socket;
-    let reconnectTimeout;
+    let reconnectTimeout = null;
+    let heartbeatInterval = null;
+    let pongTimeout = null;
+    let reconnectAttempts = 0;
+    let connectedOnce = false;
+    let cancelled = false;
+    manualLogoutRef.current = false;
+
+    const clearHeartbeat = () => {
+      if (heartbeatInterval) clearInterval(heartbeatInterval);
+      if (pongTimeout) clearTimeout(pongTimeout);
+      heartbeatInterval = null;
+      pongTimeout = null;
+    };
+
+    const scheduleReconnect = () => {
+      if (cancelled || manualLogoutRef.current) return;
+      const delay = Math.min(30000, 1000 * (2 ** reconnectAttempts));
+      reconnectAttempts += 1;
+      setConnectionBanner({ type: 'reconnecting', text: 'Reconnecting...' });
+      reconnectTimeout = setTimeout(connect, delay);
+    };
+
+    const refetchOpenChat = async () => {
+      const chat = selectedChatRef.current;
+      if (!chat) return;
+      try {
+        await loadMessagesForChat(chat, 1, { reset: true });
+      } catch (err) {
+        showToast(err.message || 'Messages refresh nahi ho paaye', 'warning');
+      }
+    };
 
     const connect = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/api/v1/ws`;
+      if (cancelled || manualLogoutRef.current) return;
+      const defaultProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const defaultWsUrl = `${defaultProtocol}//${window.location.host}/api/v1/ws`;
+      const wsUrl = import.meta.env.VITE_WS_URL || defaultWsUrl;
       socket = new WebSocket(wsUrl);
       wsRef.current = socket;
 
       socket.onopen = () => {
-        console.log('WebSocket connected');
+        clearHeartbeat();
+        const wasReconnect = connectedOnce || reconnectAttempts > 0;
+        connectedOnce = true;
+        reconnectAttempts = 0;
+        if (wasReconnect) {
+          setConnectionBanner({ type: 'connected', text: 'Connected' });
+          setTimeout(() => setConnectionBanner(null), 1800);
+          refetchOpenChat();
+        } else {
+          setConnectionBanner(null);
+        }
+        heartbeatInterval = setInterval(() => {
+          if (socket.readyState !== WebSocket.OPEN) return;
+          socket.send(JSON.stringify({ type: 'ping' }));
+          if (pongTimeout) clearTimeout(pongTimeout);
+          pongTimeout = setTimeout(() => {
+            if (socket.readyState === WebSocket.OPEN) socket.close();
+          }, 5000);
+        }, 30000);
       };
 
       socket.onmessage = (event) => {
         const incomingData = JSON.parse(event.data);
+
+        if (incomingData.type === 'pong') {
+          if (pongTimeout) clearTimeout(pongTimeout);
+          pongTimeout = null;
+          return;
+        }
 
         // Event: Naya message aaya
         if (incomingData.type === "new_message") {
@@ -319,40 +386,67 @@ function App() {
         }
       };
 
-      socket.onerror = (error) => {
-        console.error('WebSocket error:', error);
+      socket.onerror = () => {
+        setConnectionBanner({ type: 'reconnecting', text: 'Reconnecting...' });
       };
 
       socket.onclose = (event) => {
+        clearHeartbeat();
         wsRef.current = null;
         if (event.code === 1008) {
-          console.error('WebSocket auth failed (1008). Stopping reconnection and logging out.');
+          manualLogoutRef.current = true;
+          showToast('Session expire ho gaya. Dobara login karo.', 'error');
           setIsAuthenticated(false);
           localStorage.clear();
           sessionStorage.clear();
           return;
         }
-        console.log('WebSocket disconnected. Attempting to reconnect...');
-        reconnectTimeout = setTimeout(connect, 3000); // Reconnect in 3s
+        scheduleReconnect();
       };
     };
 
     connect();
 
     return () => {
+      cancelled = true;
       if (socket) socket.close();
       if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      clearHeartbeat();
       wsRef.current = null;
     };
   }, [isAuthenticated]);
+
+  async function loadMessagesForChat(chat, page = 1, options = {}) {
+    if (!chat?.id) return;
+    const { reset = false, appendOlder = false } = options;
+    if (appendOlder) setLoadingOlderMessages(true);
+    try {
+      const data = await getMessages(chat.id, page, 50);
+      const nextMessages = data.messages || [];
+      setMessagePage(data.page || page);
+      setHasMoreMessages(Boolean(data.has_more));
+      setMessages((prev) => {
+        if (reset || !appendOlder) return nextMessages;
+        const seen = new Set(prev.map((message) => message.id));
+        const older = nextMessages.filter((message) => !seen.has(message.id));
+        return [...older, ...prev];
+      });
+    } finally {
+      if (appendOlder) setLoadingOlderMessages(false);
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!selectedChatRef.current || loadingOlderMessages || !hasMoreMessages) return;
+    await loadMessagesForChat(selectedChatRef.current, messagePage + 1, { appendOlder: true });
+  }
 
   async function fetchInitialData() {
     try {
       const userRes  = await api.get('/users/me');
       const user = userRes.data;
       setCurrentUser(user);
-      const chatsRes = await api.get('/chats/');
-      const fetchedChats = chatsRes.data;
+      const fetchedChats = await getChats();
       setChats(fetchedChats);
 
       // Restore previously selected chat after refresh
@@ -365,18 +459,20 @@ function App() {
           setSelectedChat(chat);
           selectedChatRef.current = chat;
           try {
-            const res = await api.get(`/messages/${chat.id}`);
-            setMessages(res.data);
+            await loadMessagesForChat(chat, 1, { reset: true });
           } catch (err) {
-            console.error("Failed to restore messages", err);
+            showToast(err.message || 'Messages restore nahi ho paaye', 'warning');
           }
         }
       }
     } catch (error) {
       if (error.response?.status === 401) {
+        manualLogoutRef.current = true;
         setIsAuthenticated(false);
         localStorage.clear();
         sessionStorage.clear();
+      } else {
+        showToast(error.message || 'Initial data load nahi ho paaya', 'error');
       }
     } finally {
       setLoading(false);
@@ -389,23 +485,21 @@ function App() {
 
   const fetchContacts = async () => {
     try {
-      const res = await api.get('/contacts/');
-      setContacts(res.data);
+      const data = await getContactsApi();
+      setContacts(data);
     } catch (error) {
-      console.error(error);
+      showToast(error.message || 'Contacts load nahi ho paaye', 'error');
     }
   };
 
   const startNewChat = async (contactId) => {
     try {
-      const res = await api.post('/chats/', { contact_id: contactId });
+      const chat = await createChat(contactId);
       setIsNewChatOpen(false);
       await fetchInitialData();
-      openChat(res.data);
+      openChat(chat);
     } catch (error) {
-      console.error('startNewChat error:', error.response?.data || error.message);
-      const detail = error.response?.data?.detail || error.message || 'Error starting chat';
-      alert(detail);
+      showToast(error.message || 'Error starting chat', 'error');
     }
   };
 
@@ -416,8 +510,7 @@ function App() {
     // Clear unread count locally immediately
     setChats(prev => prev.map(c => c.id === chat.id ? { ...c, unread_count: 0 } : c));
     try {
-      const res = await api.get(`/messages/${chat.id}`);
-      setMessages(res.data);
+      await loadMessagesForChat(chat, 1, { reset: true });
       // Mark messages as read via WebSocket
       const receiver = !chat.is_group ? chat.participants?.find(p => p.user_id !== currentUser?.id) : null;
       if (receiver && wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -428,19 +521,16 @@ function App() {
         }));
       }
     } catch (error) {
-      console.error("Failed to load messages", error);
+      showToast(error.message || 'Messages load nahi ho paaye', 'error');
     }
   };
 
   const handleReaction = async (messageId, emoji) => {
     try {
-      await api.post('/reactions/', {
-        message_id: messageId,
-        reaction: emoji
-      });
+      await addReaction(messageId, emoji);
       setReactionPicker(null);
     } catch (error) {
-      console.error('Failed to add reaction', error);
+      showToast(error.message || 'Reaction add nahi ho paaya', 'error');
     }
   };
 
@@ -474,7 +564,7 @@ function App() {
       try {
         await api.post(`/messages/${message.id}/star`);
       } catch (error) {
-        console.error('Failed to star message', error);
+        showToast(error.message || 'Message star nahi ho paaya', 'error');
       }
       return;
     }
@@ -486,10 +576,9 @@ function App() {
       const deleteForEveryone = isMine ? window.confirm('Delete for everyone?') : false;
 
       try {
-        await api.delete(`/messages/${message.id}`, { params: { delete_for_everyone: deleteForEveryone } });
+        await deleteMessage(message.id, { deleteForEveryone });
       } catch (error) {
-        console.error('Failed to delete message', error);
-        alert(error.response?.data?.detail || 'Failed to delete message');
+        showToast(error.message || 'Failed to delete message', 'error');
         return;
       }
 
@@ -517,34 +606,33 @@ function App() {
     }
   };
 
-  const handleForwardMessage = async (chatIds) => {
+  const handleForwardMessage = async (message, chatIds) => {
+    const sourceMessage = message || messageToForward;
     try {
       for (const chatId of chatIds) {
-        await api.post('/messages/', {
+        await sendMessageApi({
           chat_id: chatId,
-          content: messageToForward.content,
-          message_type: messageToForward.message_type,
-          media_url: messageToForward.media_url
+          content: sourceMessage.content,
+          message_type: sourceMessage.message_type,
+          media_url: sourceMessage.media_url
         });
       }
       setIsForwardModalOpen(false);
       setMessageToForward(null);
-      alert('Message forwarded successfully');
+      showToast('Message forwarded successfully', 'success');
     } catch (error) {
-      console.error('Failed to forward message', error);
-      alert('Failed to forward message');
+      showToast(error.message || 'Failed to forward message', 'error');
     }
   };
 
   const handleCreateGroup = async (groupData) => {
     try {
-      const res = await api.post('/groups/create', groupData);
+      const group = await createGroup(groupData);
       setIsCreateGroupOpen(false);
       await fetchInitialData();
-      openChat(res.data);
+      openChat(group);
     } catch (error) {
-      console.error('Failed to create group', error);
-      alert(error.response?.data?.detail || 'Failed to create group');
+      showToast(error.message || 'Failed to create group', 'error');
     }
   };
 
@@ -592,6 +680,24 @@ function App() {
 
   return (
     <div style={{ display:'flex', height:'100vh', width:'100vw', overflow:'hidden', background:'#111b21' }}>
+      {connectionBanner && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          padding: '6px 14px',
+          borderRadius: '0 0 8px 8px',
+          background: connectionBanner.type === 'connected' ? '#0d7a45' : '#8a6d12',
+          color: '#fff',
+          fontSize: 13,
+          fontWeight: 600,
+          boxShadow: '0 6px 18px rgba(0,0,0,.28)',
+        }}>
+          {connectionBanner.text}
+        </div>
+      )}
 
       {/* ══════════════ LEFT SIDEBAR (thin icon nav) ══════════════ */}
       <div style={{
@@ -776,6 +882,9 @@ function App() {
             typingUsers={typingUsers[selectedChat?.id] || []}
             ws={wsRef.current}
             onMessageAction={handleMessageAction}
+            hasMoreMessages={hasMoreMessages}
+            loadingOlderMessages={loadingOlderMessages}
+            onLoadOlderMessages={loadOlderMessages}
             replyTo={replyTo}
             onCancelReply={() => setReplyTo(null)}
             onCallStarted={(callId, callType, remoteUser) =>
@@ -832,6 +941,8 @@ function App() {
       {/* ── Forward Message Modal ── */}
       {isForwardModalOpen && (
         <ForwardMessageModal
+          isOpen={isForwardModalOpen}
+          message={messageToForward}
           chats={chats}
           currentUser={currentUser}
           onClose={() => {

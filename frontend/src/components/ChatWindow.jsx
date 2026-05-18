@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useLayoutEffect, useState } from 'react';
 import Avatar from './Avatar';
 import MessageBubble from './chat/MessageBubble';
 import ChatInput from './chat/ChatInput';
@@ -72,14 +72,27 @@ function ChatWindow({
   ws,
   onCallStarted,
   onMessageAction,
+  hasMoreMessages = false,
+  loadingOlderMessages = false,
+  onLoadOlderMessages,
   replyTo,
   onCancelReply,
 }) {
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
+  const preserveScrollHeightRef = useRef(null);
   const [lightbox, setLightbox] = useState(null);
 
   // Auto-scroll to bottom on new messages
-  useEffect(() => {
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (preserveScrollHeightRef.current !== null) {
+      const previousHeight = preserveScrollHeightRef.current;
+      preserveScrollHeightRef.current = null;
+      container.scrollTop += container.scrollHeight - previousHeight;
+      return;
+    }
     const el = messagesEndRef.current;
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth' });
@@ -107,6 +120,19 @@ function ChatWindow({
   };
 
   if (!chat) return <EmptyState />;
+
+  const handleLoadOlder = async () => {
+    if (!hasMoreMessages || loadingOlderMessages || !onLoadOlderMessages) return;
+    const container = messagesContainerRef.current;
+    preserveScrollHeightRef.current = container?.scrollHeight ?? null;
+    await onLoadOlderMessages();
+  };
+
+  const handleMessagesScroll = () => {
+    const container = messagesContainerRef.current;
+    if (!container || container.scrollTop > 40) return;
+    handleLoadOlder();
+  };
 
   const chatOther = chat.participants?.find(p => p.user_id !== currentUser?.id);
   const chatName = chat.is_group
@@ -214,6 +240,7 @@ function ChatWindow({
 
       {/* ── Messages area ── */}
       <div
+        ref={messagesContainerRef}
         style={{
           flex: 1, overflowY: 'auto',
           padding: '8px 7% 8px',
@@ -221,7 +248,31 @@ function ChatWindow({
           zIndex: 10, position: 'relative',
         }}
         onClick={() => onContextMenu?.(null)}
+        onScroll={handleMessagesScroll}
       >
+        {hasMoreMessages && (
+          <button
+            type="button"
+            onClick={handleLoadOlder}
+            disabled={loadingOlderMessages}
+            style={{
+              alignSelf: 'center',
+              margin: '4px 0 8px',
+              background: '#202c33',
+              border: '1px solid #2a3942',
+              color: '#00a884',
+              borderRadius: 8,
+              padding: '6px 12px',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: loadingOlderMessages ? 'wait' : 'pointer',
+              opacity: loadingOlderMessages ? 0.7 : 1,
+            }}
+          >
+            {loadingOlderMessages ? 'Loading...' : 'Load older messages'}
+          </button>
+        )}
+
         {messages.length === 0 ? (
           <div style={{
             alignSelf: 'center', marginTop: 16,

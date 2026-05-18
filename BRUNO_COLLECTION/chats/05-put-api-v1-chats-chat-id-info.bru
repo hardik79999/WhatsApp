@@ -1,0 +1,24 @@
+meta {
+  name: PUT /api/v1/chats/{chat_id}/info
+  type: http
+  seq: 5
+}
+
+put {
+  url: {{baseUrl}}/api/v1/chats/{{chat_id}}/info
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "group_name": "Project User",
+    "group_description": "Project test group",
+    "group_picture": "sample_group_picture"
+  }
+}

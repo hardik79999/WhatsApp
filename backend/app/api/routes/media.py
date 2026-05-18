@@ -4,11 +4,13 @@ import aiofiles
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
+from app.core.config import settings
 from app.core.database import get_db
+from app.core.rate_limit import get_user_or_remote_address, limiter
 from app.api.deps import get_current_user
 from app.models.user_model import User
 from app.models.media_model import MediaUpload
@@ -16,8 +18,8 @@ from app.models.media_model import MediaUpload
 router = APIRouter()
 
 # ── Storage root — resolved to absolute path at startup ──────────────────────
-MEDIA_DIR = Path("media").resolve()
-MEDIA_DIR.mkdir(exist_ok=True)
+MEDIA_DIR = settings.media_storage_path
+MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_TYPES: dict[str, tuple[str, str]] = {
     "image/jpeg":       ("image",    "images"),
@@ -29,10 +31,7 @@ ALLOWED_TYPES: dict[str, tuple[str, str]] = {
     "audio/mpeg":       ("audio",    "audios"),
     "audio/ogg":        ("audio",    "audios"),
     "audio/wav":        ("audio",    "audios"),
-    "audio/webm":       ("audio",    "audios"),
     "application/pdf":  ("document", "documents"),
-    "application/msword":                                                    ("document", "documents"),
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ("document", "documents"),
 }
 
 # Allowed folder names — used to validate path parameters
@@ -40,7 +39,7 @@ ALLOWED_FOLDERS = {"images", "videos", "audios", "documents", "voice"}
 
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-BASE_URL = os.getenv("BASE_URL", "http://localhost:8000")
+BASE_URL = settings.BASE_URL
 
 
 class MediaUploadResponse(BaseModel):
@@ -70,11 +69,16 @@ def _safe_resolve(folder: str, filename: str) -> Path:
 
 
 @router.post("/upload", response_model=MediaUploadResponse)
+@limiter.limit("20/minute", key_func=get_user_or_remote_address)
 async def upload_media(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if file.size is not None and file.size > MAX_FILE_SIZE:
+        raise HTTPException(status_code=413, detail="File too large")
+
     contents = await file.read()
     file_size = len(contents)
 
@@ -82,7 +86,7 @@ async def upload_media(
         raise HTTPException(status_code=400, detail="Empty file")
 
     if file_size > MAX_FILE_SIZE:
-        raise HTTPException(status_code=413, detail="File too large. Max 50 MB")
+        raise HTTPException(status_code=413, detail="File too large")
 
     # Validate MIME type from the header (not the filename extension)
     content_type = (file.content_type or "").split(";")[0].strip().lower()
@@ -91,15 +95,27 @@ async def upload_media(
 
     file_type, folder = ALLOWED_TYPES[content_type]
     folder_path = MEDIA_DIR / folder
-    folder_path.mkdir(exist_ok=True)
+    folder_path.mkdir(parents=True, exist_ok=True)
 
     # Generate a UUID-based filename — never trust the original name for storage
     original_suffix = Path(file.filename or "file").suffix.lower()
     # Whitelist safe extensions
     safe_suffixes = {".jpg", ".jpeg", ".png", ".gif", ".webp",
                      ".mp4", ".webm", ".mp3", ".ogg", ".wav",
-                     ".pdf", ".doc", ".docx"}
-    suffix = original_suffix if original_suffix in safe_suffixes else ".bin"
+                     ".pdf"}
+    default_suffixes = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/gif": ".gif",
+        "image/webp": ".webp",
+        "video/mp4": ".mp4",
+        "video/webm": ".webm",
+        "audio/mpeg": ".mp3",
+        "audio/ogg": ".ogg",
+        "audio/wav": ".wav",
+        "application/pdf": ".pdf",
+    }
+    suffix = original_suffix if original_suffix in safe_suffixes else default_suffixes[content_type]
     unique_name = f"{uuid.uuid4()}{suffix}"
     file_path = folder_path / unique_name
 
@@ -112,7 +128,7 @@ async def upload_media(
 
     media = MediaUpload(
         uploaded_by_id=current_user.id,
-        file_name=file.filename or unique_name,
+        file_name=unique_name,
         file_type=file_type,
         mime_type=content_type,
         file_size=file_size,
@@ -157,7 +173,7 @@ async def upload_voice_note(
         raise HTTPException(status_code=400, detail=f"Unsupported voice type: {content_type}")
 
     folder_path = MEDIA_DIR / "voice"
-    folder_path.mkdir(exist_ok=True)
+    folder_path.mkdir(parents=True, exist_ok=True)
 
     original_suffix = Path(file.filename or "voice").suffix.lower()
     safe_suffixes = {".webm", ".ogg", ".mp4", ".mp3", ".wav"}
@@ -172,7 +188,7 @@ async def upload_voice_note(
 
     media = MediaUpload(
         uploaded_by_id=current_user.id,
-        file_name=file.filename or unique_name,
+        file_name=unique_name,
         file_type="audio",
         mime_type=content_type,
         file_size=file_size,

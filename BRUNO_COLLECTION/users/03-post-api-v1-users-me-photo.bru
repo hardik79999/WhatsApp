@@ -1,0 +1,19 @@
+meta {
+  name: POST /api/v1/users/me/photo
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users/me/photo
+  body: multipartForm
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}
+
+body:multipart-form {
+  file: @file(./sample-file.bin)
+}

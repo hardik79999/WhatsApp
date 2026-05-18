@@ -1,0 +1,23 @@
+meta {
+  name: POST /api/v1/contacts/sync-single
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/contacts/sync-single
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+  Content-Type: application/json
+}
+
+body:json {
+  {
+    "phone": "9876543210",
+    "name": "Project User"
+  }
+}

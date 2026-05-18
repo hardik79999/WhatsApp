@@ -2,6 +2,9 @@ import { useState, useEffect, useRef } from 'react';
 import Avatar from './Avatar';
 import { Icon } from './Icons';
 import api from '../api';
+import { syncContact } from '../api/contacts';
+import { showToast } from './Toast';
+import { validatePhone } from '../utils/validators';
 
 export default function NewChatPanel({ isOpen, onClose, onStartChat, onCreateGroup }) {
   const [searchQuery, setSearchQuery]   = useState('');
@@ -45,8 +48,7 @@ export default function NewChatPanel({ isOpen, onClose, onStartChat, onCreateGro
           setError('No user found with this number');
         }
       } catch (err) {
-        console.error('Search error:', err);
-        setError('Search failed, please try again');
+        setError(err.message || 'Search failed, please try again');
       } finally {
         setSearching(false);
       }
@@ -59,6 +61,26 @@ export default function NewChatPanel({ isOpen, onClose, onStartChat, onCreateGro
       await onStartChat(user.id);
     } finally {
       setStarting(null);
+    }
+  };
+
+  const handleSyncContact = async () => {
+    const validation = validatePhone(searchQuery);
+    if (!validation.valid) {
+      setError(validation.error);
+      return;
+    }
+    setSearching(true);
+    setError('');
+    try {
+      const contact = await syncContact(validation.value);
+      await onStartChat(contact.contact_id);
+    } catch (err) {
+      const message = err.message || 'Contact sync nahi ho paaya';
+      setError(message);
+      showToast(message, 'error');
+    } finally {
+      setSearching(false);
     }
   };
 
@@ -173,6 +195,22 @@ export default function NewChatPanel({ isOpen, onClose, onStartChat, onCreateGro
             <div style={{ fontSize: 48, marginBottom: 16 }}>😕</div>
             <p style={{ color: '#e9edef', fontSize: 15, margin: '0 0 8px' }}>{error}</p>
             <p style={{ fontSize: 13, margin: 0 }}>Try a different phone number</p>
+            <button
+              type="button"
+              onClick={handleSyncContact}
+              style={{
+                marginTop: 18,
+                background: '#00a884',
+                color: '#111b21',
+                border: 'none',
+                borderRadius: 8,
+                padding: '9px 14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Sync contact
+            </button>
           </div>
         )}
 

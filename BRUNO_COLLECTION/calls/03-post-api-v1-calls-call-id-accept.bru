@@ -1,0 +1,15 @@
+meta {
+  name: POST /api/v1/calls/{call_id}/accept
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/calls/{{call_id}}/accept
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

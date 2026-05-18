@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from uuid import UUID
 from datetime import datetime, timezone
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
@@ -44,14 +44,44 @@ def _assert_group_admin(db: Session, group_id: UUID, user_id: UUID) -> GroupMemb
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
 class GroupCreateRequest(BaseModel):
-    group_name: str
-    group_description: Optional[str] = None
+    group_name: str = Field(..., min_length=1, max_length=100)
+    group_description: Optional[str] = Field(default=None, max_length=500)
     group_pic_id: Optional[UUID] = None
-    participant_ids: List[UUID]
+    participant_ids: List[UUID] = Field(..., min_length=1, max_length=256)
+
+    @field_validator("group_name")
+    @classmethod
+    def validate_group_name(cls, value: str) -> str:
+        name = str(value or "").strip()
+        if not name:
+            raise ValueError("Group name is required")
+        return name
+
+    @field_validator("group_description")
+    @classmethod
+    def validate_group_description(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        description = value.strip()
+        return description or None
+
+    @field_validator("participant_ids")
+    @classmethod
+    def validate_participant_ids(cls, value: List[UUID]) -> List[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("Participant IDs cannot contain duplicates")
+        return value
 
 
 class MemberIdsRequest(BaseModel):
-    member_ids: List[UUID]
+    member_ids: List[UUID] = Field(..., min_length=1, max_length=256)
+
+    @field_validator("member_ids")
+    @classmethod
+    def validate_member_ids(cls, value: List[UUID]) -> List[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("Member IDs cannot contain duplicates")
+        return value
 
 
 class GroupMemberResponse(BaseModel):

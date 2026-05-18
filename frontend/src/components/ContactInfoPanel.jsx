@@ -27,7 +27,8 @@ export default function ContactInfoPanel({ contact, isOpen, onClose }) {
     api.get(`/messages/${chatId}`)
       .then(res => {
         if (cancelled) return;
-        const imgs = (res.data || []).filter(
+        const list = res.data?.messages || res.data || [];
+        const imgs = list.filter(
           m => m.message_type === 'image' && m.media_url
         );
         setMediaCount(imgs.length);

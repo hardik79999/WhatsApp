@@ -11,7 +11,7 @@ from app.models.user_model import User
 from app.models.chat_model import ChatParticipant, Chat
 from app.models.message_model import Message, StarredMessage, MessageDeletion
 from app.models.reaction_model import MessageReaction
-from app.schemas.message_schema import MessageCreate, MessageEdit, MessageResponse
+from app.schemas.message_schema import MessageCreate, MessageEdit, MessagePageResponse, MessageResponse
 from app.websocket.manager import manager
 
 router = APIRouter()
@@ -144,9 +144,11 @@ async def send_message(
 # GET /{chat_id}  — Fetch messages for a chat
 # ─────────────────────────────────────────────────────────────────────────────
 
-@router.get("/{chat_id}", response_model=List[MessageResponse])
+@router.get("/{chat_id}", response_model=MessagePageResponse)
 def get_messages(
     chat_id: UUID,
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -157,7 +159,7 @@ def get_messages(
         MessageDeletion.user_id == current_user.id,
     ))
 
-    messages = (
+    base_query = (
         db.query(Message)
         .options(
             joinedload(Message.replied_message),
@@ -165,10 +167,23 @@ def get_messages(
         )
         .filter(Message.chat_id == chat_id)
         .filter(~deleted_for_me)
-        .order_by(Message.created_at.asc())
+    )
+    total = base_query.count()
+    offset = (page - 1) * limit
+    messages = (
+        base_query
+        .order_by(Message.created_at.desc())
+        .offset(offset)
+        .limit(limit)
         .all()
     )
-    return messages
+    messages.reverse()
+    return {
+        "messages": messages,
+        "total": total,
+        "page": page,
+        "has_more": offset + limit < total,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

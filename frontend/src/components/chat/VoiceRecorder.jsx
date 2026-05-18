@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import api from "../../api";
 import { Icon } from "../Icons";
+import { showToast } from "../Toast";
 
 export default function VoiceRecorder({ onRecorded, disabled }) {
   const [recording, setRecording] = useState(false);
@@ -46,8 +47,7 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
       setRecording(true);
       startTimer();
     } catch (err) {
-      console.error("Microphone access error:", err);
-      alert("Microphone access denied. Please check your browser permissions.");
+      showToast(err.message || "Microphone access denied. Please check your browser permissions.", "error");
     }
   };
 
@@ -79,8 +79,7 @@ export default function VoiceRecorder({ onRecorded, disabled }) {
           });
           onRecorded({ ...data, duration });
         } catch (err) {
-          console.error("Voice upload failed:", err);
-          alert("Voice upload failed. Please try again.");
+          showToast(err.message || "Voice upload failed. Please try again.", "error");
         }
       };
       mediaRecorderRef.current.stop();

@@ -1,0 +1,15 @@
+meta {
+  name: GET /api/v1/statuses/
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/statuses/
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

@@ -5,6 +5,8 @@ import { useState, useRef, useEffect } from "react";
 import Avatar from "./Avatar";
 import { Icon } from "./Icons";
 import api from "../api";
+import { showToast } from "./Toast";
+import { validateFileUpload, validateUsername } from "../utils/validators";
 
 const SETTINGS_ITEMS = [
   { icon: "👤", label: "Profile",       sub: "Name, profile photo",           key: "profile" },
@@ -23,6 +25,7 @@ export default function ProfilePanel({ isOpen, onClose, currentUser, onProfileUp
   const [bioInput,      setBioInput]      = useState(currentUser?.bio || "Hey there! I am using WhatsApp.");
   const [uploading,     setUploading]     = useState(false);
   const [searchQuery,   setSearchQuery]   = useState("");
+  const [profileError,  setProfileError]  = useState("");
 
   const fileInputRef = useRef(null);
   const nameRef      = useRef(null);
@@ -39,29 +42,48 @@ export default function ProfilePanel({ isOpen, onClose, currentUser, onProfileUp
   useEffect(() => { if (isEditingBio)  bioRef.current?.focus();  }, [isEditingBio]);
 
   const handleNameSave = async () => {
-    if (!nameInput.trim()) return;
+    const validation = validateUsername(nameInput);
+    if (!validation.valid) {
+      setProfileError(validation.error);
+      return;
+    }
+    setProfileError("");
     try {
-      const res = await api.put("/users/me", { username: nameInput.trim() });
+      const res = await api.put("/users/me", { username: validation.value });
       onProfileUpdate(res.data);
       setIsEditingName(false);
     } catch (err) {
-      console.error("Failed to update name", err);
+      showToast(err.message || "Failed to update name", "error");
     }
   };
 
   const handleBioSave = async () => {
+    if (bioInput.trim().length > 200) {
+      setProfileError("Bio 200 characters se chhota hona chahiye");
+      return;
+    }
+    setProfileError("");
     try {
       const res = await api.put("/users/me", { bio: bioInput.trim() });
       onProfileUpdate(res.data);
       setIsEditingBio(false);
     } catch (err) {
-      console.error("Failed to update bio", err);
+      showToast(err.message || "Failed to update bio", "error");
     }
   };
 
   const handlePhotoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setProfileError("Profile photo image file hona chahiye");
+      return;
+    }
+    const validation = validateFileUpload(file);
+    if (!validation.valid) {
+      setProfileError(validation.error);
+      return;
+    }
     const formData = new FormData();
     formData.append("file", file);
     setUploading(true);
@@ -71,8 +93,7 @@ export default function ProfilePanel({ isOpen, onClose, currentUser, onProfileUp
       });
       onProfileUpdate(res.data);
     } catch (err) {
-      console.error("Photo upload failed", err);
-      alert("Photo upload failed!");
+      showToast(err.message || "Photo upload failed!", "error");
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -184,6 +205,11 @@ export default function ProfilePanel({ isOpen, onClose, currentUser, onProfileUp
           <div style={{ color: "#e9edef", fontSize: 20, fontWeight: 600 }}>
             {currentUser?.username || currentUser?.phone || "You"}
           </div>
+          {profileError && (
+            <div style={{ color: "#f15c6d", fontSize: 13, padding: "0 30px", textAlign: "center" }}>
+              {profileError}
+            </div>
+          )}
         </div>
 
         {/* ── Your name ────────────────────────────────────── */}

@@ -1,0 +1,15 @@
+meta {
+  name: GET /api/v1/groups/{group_id}/members
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/groups/{{group_id}}/members
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{access_token}}
+}

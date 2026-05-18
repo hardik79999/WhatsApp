@@ -1,8 +1,8 @@
-import uuid
 import os
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, HTTPException
+from fastapi import APIRouter, Depends, File, Query, Request, UploadFile, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -56,6 +56,7 @@ def update_profile(
 # 2. Profile Photo (DP) upload karne ke liye
 @router.post("/me/photo", response_model=UserResponse)
 def upload_profile_picture(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -83,7 +84,9 @@ def upload_profile_picture(
     with open(file_location, "wb") as buffer:
         buffer.write(contents)
 
-    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("host", request.url.netloc)
+    base_url = f"{scheme}://{host}"
     current_user.profile_pic = f"{base_url}/uploads/profiles/{new_filename}"
     db.commit()
     db.refresh(current_user)
